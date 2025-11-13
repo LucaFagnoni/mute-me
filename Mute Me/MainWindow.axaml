@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Mute_Me.MainWindow"
+        x:CompileBindings="True"
         TransparencyLevelHint="Transparent"
         Background="Transparent"
         CanResize="False"
@@ -11,7 +12,7 @@
         Position="0,0"
         Width="25"
         Height="25">
-    <Image x:Name="microphoneStatusIcon" Source="Assets/unmuted.png"
+    <Image x:Name="microphoneStatusIcon" Source="avares://MuteMe/Assets/unmuted.png"
            Stretch="Uniform"
            HorizontalAlignment="Center"
            VerticalAlignment="Center"

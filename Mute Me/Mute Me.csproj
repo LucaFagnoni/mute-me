@@ -1,11 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+		<AssemblyName>MuteMe</AssemblyName>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
         <Nullable>enable</Nullable>
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+		<PublishAot>true</PublishAot>
+		<Configurations>Debug;Release;Trimmed</Configurations>
+		<Platforms>AnyCPU</Platforms>
+		
+		<DebugType>none</DebugType>
+		<DebugSymbols>false</DebugSymbols>
     </PropertyGroup>
 
     <ItemGroup>

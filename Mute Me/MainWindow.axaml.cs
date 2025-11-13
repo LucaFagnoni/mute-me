@@ -41,11 +41,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         
-        using var stream = AssetLoader.Open(new Uri("avares://Mute Me/Assets/muted.png"));
+        using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/muted.png"));
         mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
         stream.Dispose();
         
-        using var stream2 = AssetLoader.Open(new Uri("avares://Mute Me/Assets/unmuted.png"));
+        using var stream2 = AssetLoader.Open(new Uri("avares://MuteMe/Assets/unmuted.png"));
         unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
         stream2.Dispose();
         
