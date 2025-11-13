@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mute Me", "Mute Me\Mute Me.csproj", "{484F0156-EF2F-41E4-9DF1-6C4A00F2726E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{484F0156-EF2F-41E4-9DF1-6C4A00F2726E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{484F0156-EF2F-41E4-9DF1-6C4A00F2726E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{484F0156-EF2F-41E4-9DF1-6C4A00F2726E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{484F0156-EF2F-41E4-9DF1-6C4A00F2726E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
