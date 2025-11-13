@@ -7,12 +7,13 @@
         SystemDecorations="None"
         Topmost="True"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterScreen"
-        Width="400"
-        Height="400">
-    <Image Source="Assets/overlay.png"
+        WindowStartupLocation="Manual"
+        Position="0,0"
+        Width="25"
+        Height="25">
+    <Image x:Name="microphoneStatusIcon" Source="Assets/unmuted.png"
            Stretch="Uniform"
-           HorizontalAlignment="Right"
-           VerticalAlignment="Top"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center"
            Opacity="0.9"/>
 </Window>
