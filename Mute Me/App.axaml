@@ -1,12 +1,38 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
              x:Class="Mute_Me.App"
              x:CompileBindings="True"
+             RequestedThemeVariant="Default"
              >
-             <!-- RequestedThemeVariant="Default" -->
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
-
-    <!-- <Application.Styles> -->
-    <!--     <FluentTheme /> -->
-    <!-- </Application.Styles> -->
+    <!-- 6 MB in build -->
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+    
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon 
+                Icon="avares://MuteMe/Assets/unmuted.ico" 
+                ToolTipText="Avalonia Tray Icon ToolTip">
+                <TrayIcon.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Modifiers">
+                            <NativeMenu>
+                                <NativeMenuItem Header="None" CommandParameter="0x0000" ToggleType="Radio" IsChecked="True"></NativeMenuItem>
+                                <NativeMenuItem Header="Alt" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
+                                <NativeMenuItem Header="Control" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
+                                <NativeMenuItem Header="Shift" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
+                                <NativeMenuItem Header="Win" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
+                            </NativeMenu>
+                        </NativeMenuItem>
+                        <NativeMenuItem Gesture="102"></NativeMenuItem>
+                        <NativeMenuItem Header="Mute" ToggleType="CheckBox"></NativeMenuItem>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Quit" Click="Quit_OnClick"></NativeMenuItem>
+                    </NativeMenu>
+                </TrayIcon.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
 </Application>
