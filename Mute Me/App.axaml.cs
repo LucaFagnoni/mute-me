@@ -9,12 +9,10 @@ namespace Mute_Me;
 
 public partial class App : Application
 {
-    public ICommand SetModifier { get; set; }
-    
+ 
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
-        SetModifier = new RelayCommand<IntPtr>(SetModifierCommand);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -25,11 +23,6 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    public void SetModifierCommand(IntPtr modifier)
-    {
-        
     }
 
     private void Quit_OnClick(object? sender, EventArgs e)
