@@ -1,9 +1,7 @@
 using System;
-using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using CommunityToolkit.Mvvm.Input;
 
 namespace Mute_Me;
 

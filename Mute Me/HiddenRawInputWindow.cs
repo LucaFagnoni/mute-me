@@ -3,36 +3,45 @@ using System.Runtime.InteropServices;
 
 public class HiddenRawInputWindow
 {
+    // Costanti Win32
     private const uint WM_INPUT = 0x00FF;
     private const uint RIDEV_INPUTSINK = 0x00000100;
     private const uint RID_INPUT = 0x10000003;
-    private const int WS_POPUP = unchecked((int)0x80000000);
+    
+    // HWND_MESSAGE: crea una finestra che non appare mai, usata solo per i messaggi
+    private static readonly IntPtr HWND_MESSAGE = new IntPtr(-3);
 
     private IntPtr _hwnd = IntPtr.Zero;
     private bool _isRegistered;
-    private WndProcDelegate _wndProc; // salva riferimento per il GC
+    private WndProcDelegate _wndProc; // Mantiene vivo il delegato per il GC
+    private string _className = "HiddenRawInputWindow_Class_Unicode";
 
     public event Action<int>? KeyPressed;
-
-    private string _className = "HiddenRawInputWindow_Class";
-
+    
     // ----------------------
     // START
     // ----------------------
     public void Start()
     {
-        Console.WriteLine("HiddenRawInputWindow.Start()");
-
-        // salva delegato
+        // 1. Creiamo il delegato e lo salviamo per evitare che il GC lo raccolga
         _wndProc = WndProc;
 
-        RegisterWindowClass();
-        CreateHiddenWindow();
-
-        if (_hwnd != IntPtr.Zero)
+        try
         {
-            RegisterForRawInput(_hwnd);
+            // 2. Registriamo la classe
+            RegisterWindowClass();
+
+            // 3. Creiamo la finestra
+            CreateHiddenWindow();
+
+            // 4. Se la finestra esiste, registriamo il Raw Input
+            if (_hwnd != IntPtr.Zero)
+            {
+                RegisterForRawInput(_hwnd);
+            }
         }
+        catch (Exception ex)
+        { }
     }
 
     // ----------------------
@@ -40,52 +49,59 @@ public class HiddenRawInputWindow
     // ----------------------
     public void Stop()
     {
-        if (_hwnd != IntPtr.Zero)
+        try
         {
-            DeregisterRawInput();
-            DestroyWindow(_hwnd);
-            _hwnd = IntPtr.Zero;
+            if (_hwnd != IntPtr.Zero)
+            {
+                DeregisterRawInput();
+                DestroyWindow(_hwnd);
+                _hwnd = IntPtr.Zero;
+            }
+            
+            UnregisterClass(_className, GetModuleHandle(null));
         }
-
-        UnregisterClass(_className, GetModuleHandle(null));
-        Console.WriteLine("HiddenRawInputWindow.Stop() completed.");
+        catch (Exception ex)
+        { }
     }
 
     // ----------------------
-    // WINDOW CLASS
+    // 1. REGISTRAZIONE CLASSE
     // ----------------------
     private void RegisterWindowClass()
     {
-        WNDCLASSEX wc = new WNDCLASSEX
+        var wc = new WNDCLASSEX
         {
-            cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX)),
+            cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(),
             lpfnWndProc = _wndProc,
             hInstance = GetModuleHandle(null),
             lpszClassName = _className
         };
 
         ushort atom = RegisterClassEx(ref wc);
-        if (atom == 0)
-        {
-            int err = Marshal.GetLastWin32Error();
-            throw new Exception("RegisterClassEx failed, error=" + err);
-        }
 
-        Console.WriteLine("RegisterClassEx OK");
+        if (atom != 0) return;
+        
+        int err = Marshal.GetLastWin32Error();
+        if (err == 1410) // ERROR_CLASS_ALREADY_EXISTS
+        { }
+        else
+        {
+            throw new Exception($"RegisterClassEx fallito. Codice Errore: {err}");
+        }
     }
 
     // ----------------------
-    // HIDDEN WINDOW
+    // 2. CREAZIONE FINESTRA
     // ----------------------
     private void CreateHiddenWindow()
     {
         _hwnd = CreateWindowEx(
             0,
             _className,
-            "",
-            WS_POPUP,
+            "HiddenRawInputHost",
+            0, 
             0, 0, 0, 0,
-            IntPtr.Zero,
+            HWND_MESSAGE, // Message-Only Window
             IntPtr.Zero,
             GetModuleHandle(null),
             IntPtr.Zero
@@ -94,49 +110,39 @@ public class HiddenRawInputWindow
         if (_hwnd == IntPtr.Zero)
         {
             int err = Marshal.GetLastWin32Error();
-            Console.WriteLine("CreateWindowEx FAILED, error=" + err);
-            return;
         }
-
-        Console.WriteLine("Hidden window created: " + _hwnd);
     }
 
     // ----------------------
-    // RAW INPUT
+    // 3. RAW INPUT
     // ----------------------
     private void RegisterForRawInput(IntPtr hwnd)
     {
         RAWINPUTDEVICE[] rid = new RAWINPUTDEVICE[1];
-        rid[0].usUsagePage = 0x01; // generic desktop controls
-        rid[0].usUsage = 0x06;     // keyboard
-        rid[0].dwFlags = RIDEV_INPUTSINK;
+        rid[0].usUsagePage = 0x01; 
+        rid[0].usUsage = 0x06;     
+        rid[0].dwFlags = RIDEV_INPUTSINK; 
         rid[0].hwndTarget = hwnd;
 
-        if (!RegisterRawInputDevices(rid, (uint)rid.Length, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE))))
+        if (!RegisterRawInputDevices(rid, (uint)rid.Length, (uint)Marshal.SizeOf<RAWINPUTDEVICE>()))
         {
             int err = Marshal.GetLastWin32Error();
-            Console.WriteLine("RegisterRawInputDevices FAILED: " + err);
         }
         else
         {
             _isRegistered = true;
-            Console.WriteLine("RegisterRawInputDevices OK");
         }
     }
 
     private void DeregisterRawInput()
     {
         if (!_isRegistered) return;
-
         RAWINPUTDEVICE[] rid = new RAWINPUTDEVICE[1];
         rid[0].usUsagePage = 0x01;
         rid[0].usUsage = 0x06;
         rid[0].dwFlags = 0x00000001; // RIDEV_REMOVE
         rid[0].hwndTarget = IntPtr.Zero;
-
-        RegisterRawInputDevices(rid, (uint)rid.Length,
-            (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
-
+        RegisterRawInputDevices(rid, 1, (uint)Marshal.SizeOf<RAWINPUTDEVICE>());
         _isRegistered = false;
     }
 
@@ -149,31 +155,37 @@ public class HiddenRawInputWindow
         {
             ProcessRawInput(lParam);
         }
-
         return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
     private void ProcessRawInput(IntPtr lParam)
     {
         uint dwSize = 0;
-        GetRawInputData(lParam, RID_INPUT, IntPtr.Zero, ref dwSize, (uint)Marshal.SizeOf(typeof(RAWINPUTHEADER)));
+        GetRawInputData(lParam, RID_INPUT, IntPtr.Zero, ref dwSize, (uint)Marshal.SizeOf<RAWINPUTHEADER>());
+
         if (dwSize == 0) return;
 
         IntPtr buffer = Marshal.AllocHGlobal((int)dwSize);
         try
         {
-            if (GetRawInputData(lParam, RID_INPUT, buffer, ref dwSize, (uint)Marshal.SizeOf(typeof(RAWINPUTHEADER))) != dwSize)
+            if (GetRawInputData(lParam, RID_INPUT, buffer, ref dwSize, (uint)Marshal.SizeOf<RAWINPUTHEADER>()) != dwSize)
                 return;
 
             RAWINPUT raw = Marshal.PtrToStructure<RAWINPUT>(buffer);
 
-            if (raw.header.dwType == 1) // keyboard
+            if (raw.header.dwType == 1) // Keyboard
             {
+                bool isKeyDown = (raw.keyboard.Flags & 1) == 0; 
                 int vk = raw.keyboard.VKey;
-                Console.WriteLine("Raw key: " + vk);
-                KeyPressed?.Invoke(vk);
+
+                if (isKeyDown)
+                {
+                    KeyPressed?.Invoke(vk);
+                }
             }
         }
+        catch (Exception ex)
+        { }
         finally
         {
             Marshal.FreeHGlobal(buffer);
@@ -181,8 +193,28 @@ public class HiddenRawInputWindow
     }
 
     // ----------------------
-    // STRUCTS & WINAPI
+    // DEFINIZIONI PINVOKE (UNICODE FORZATO)
     // ----------------------
+    
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WNDCLASSEX
+    {
+        public uint cbSize;
+        public uint style;
+        public WndProcDelegate lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        [MarshalAs(UnmanagedType.LPTStr)]
+        public string lpszMenuName;
+        [MarshalAs(UnmanagedType.LPTStr)]
+        public string lpszClassName;
+        public IntPtr hIconSm;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct RAWINPUTDEVICE
     {
@@ -219,34 +251,15 @@ public class HiddenRawInputWindow
         public RAWKEYBOARD keyboard;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    private struct WNDCLASSEX
-    {
-        public uint cbSize;
-        public uint style;
-        public WndProcDelegate lpfnWndProc;
-        public int cbClsExtra;
-        public int cbWndExtra;
-        public IntPtr hInstance;
-        public IntPtr hIcon;
-        public IntPtr hCursor;
-        public IntPtr hbrBackground;
-        [MarshalAs(UnmanagedType.LPTStr)]
-        public string lpszMenuName;
-        [MarshalAs(UnmanagedType.LPTStr)]
-        public string lpszClassName;
-        public IntPtr hIconSm;
-    }
-
     private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpwcx);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool UnregisterClass(string lpClassName, IntPtr hInstance);
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr CreateWindowEx(
         int exStyle,
         string className,
@@ -261,26 +274,18 @@ public class HiddenRawInputWindow
         IntPtr hInstance,
         IntPtr param);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool DestroyWindow(IntPtr hWnd);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool RegisterRawInputDevices(
-        [In] RAWINPUTDEVICE[] pRawInputDevices,
-        uint uiNumDevices,
-        uint cbSize);
+    private static extern bool RegisterRawInputDevices([In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
 
     [DllImport("user32.dll")]
-    private static extern uint GetRawInputData(
-        IntPtr hRawInput,
-        uint uiCommand,
-        IntPtr pData,
-        ref uint pcbSize,
-        uint cbSizeHeader);
+    private static extern uint GetRawInputData(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("kernel32.dll")]
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 }

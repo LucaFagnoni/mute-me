@@ -1,37 +1,47 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-		<AssemblyName>MuteMe</AssemblyName>
+        <AssemblyName>MuteMe</AssemblyName>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+        <!-- net9.0-windows è sufficiente e più snello -->
+        <TargetFramework>net9.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        
+        <!-- CONFIGURAZIONE AVALONIA -->
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-		<PublishAot>true</PublishAot>
-		<Configurations>Debug;Release;Trimmed</Configurations>
-		<Platforms>AnyCPU</Platforms>
-		
-		<DebugType>none</DebugType>
-		<DebugSymbols>false</DebugSymbols>
-		
-
+        
+        <!-- OTTIMIZZAZIONI NATIVE AOT (SIZE) -->
+        <PublishAot>true</PublishAot>
+        <SelfContained>true</SelfContained>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        
+        <!-- Risparmia spazio rimuovendo i dati di localizzazione globali (Date, Valute, ecc.) -->
+        <!-- Se la tua app è solo in Inglese/Italiano semplice, questo taglia ~2MB -->
+        <InvariantGlobalization>true</InvariantGlobalization>
+        
+        <!-- Rimuove totalmente i simboli di debug -->
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <StripSymbols>true</StripSymbols>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Avalonia" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Desktop" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1"/>
+        
+        <!-- NOTA: Questo font "Inter" pesa circa 2.5 MB. 
+             Se vuoi l'app piccolissima, rimuovi questa riga e usa i font di sistema (Segoe UI). -->
         <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1"/>
-        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
-		<PackageReference Include="Avalonia.Diagnostics" Version="11.2.1">
-			<IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
-			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
-		</PackageReference>
-		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+
+        <!-- Rimuove le librerie di diagnostica quando NON sei in Debug -->
+        <PackageReference Include="Avalonia.Diagnostics" Version="11.2.1" Condition="'$(Configuration)' == 'Debug'" />
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Assets\" />
-	  <AvaloniaResource Include="Assets\**" />
+        <!-- Include tutti i file nella cartella Assets come risorse Avalonia -->
+        <AvaloniaResource Include="Assets\**" />
     </ItemGroup>
 </Project>
