@@ -1,0 +1,32 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Mute_Me.VolumePopup"
+        Title="Volume"
+        Width="200" Height="100"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        CanResize="False"
+        WindowStartupLocation="Manual"
+        Background="#202020"
+        TransparencyLevelHint="AcrylicBlur"
+        ExtendClientAreaToDecorationsHint="True">
+
+    <Border BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="15">
+        <StackPanel Spacing="5">
+            <TextBlock Text="Effects Volume" Foreground="White" FontSize="12" HorizontalAlignment="Center"/>
+            <Grid ColumnDefinitions="*, Auto">
+                <Slider Name="VolSlider" 
+                        Grid.Column="0"
+                        Minimum="0" Maximum="100" Value="100"
+                        TickFrequency="10" IsSnapToTickEnabled="True"
+                        Margin="0,0,10,0"/>
+                <TextBlock Grid.Column="1" 
+                           Text="{Binding #VolSlider.Value, StringFormat='{}{0}%'}" 
+                           Foreground="Gray" 
+                           VerticalAlignment="Center"
+                           Width="35"/>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>

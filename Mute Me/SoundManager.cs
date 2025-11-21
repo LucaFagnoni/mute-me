@@ -1,95 +1,160 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Avalonia.Platform; // Necessario per AssetLoader
+using Avalonia.Platform;
 
-namespace Mute_Me
+namespace Mute_Me;
+
+public class SoundManager : IDisposable
 {
-    public class SoundManager : IDisposable
+    // Importiamo PlaySound per riprodurre da memoria
+    [DllImport("winmm.dll", SetLastError = true)]
+    private static extern bool PlaySound(IntPtr pszSound, IntPtr hmod, uint fdwSound);
+
+    private const uint SND_ASYNC = 0x00000001;
+    private const uint SND_MEMORY = 0x00000004;
+    private const uint SND_NODEFAULT = 0x00000002;
+
+    // Dati audio originali (caricati dagli Assets)
+    private readonly byte[] _originalOnBytes;
+    private readonly byte[] _originalOffBytes;
+
+    // Puntatori alla memoria non gestita che contengono l'audio col volume applicato
+    private IntPtr _ptrPlayableOn = IntPtr.Zero;
+    private IntPtr _ptrPlayableOff = IntPtr.Zero;
+
+    // Dimensioni dei buffer
+    private int _sizeOn;
+    private int _sizeOff;
+
+    private float _currentVolume = 1.0f; // 1.0 = 100%
+
+    /// <summary>
+    /// Imposta il volume da 0 a 100.
+    /// Ricalcola immediatamente i buffer audio.
+    /// </summary>
+    public int Volume
     {
-        // --- P/INVOKE WINMM.DLL ---
-        [DllImport("winmm.dll", SetLastError = true)]
-        private static extern bool PlaySound(IntPtr pszSound, IntPtr hmod, uint fdwSound);
-
-        // Costanti aggiornate per riproduzione da MEMORIA
-        private const uint SND_ASYNC  = 0x00000001; // Non bloccare l'app
-        private const uint SND_MEMORY = 0x00000004; // Il primo parametro è un puntatore in memoria
-        private const uint SND_NODEFAULT = 0x00000002; // Niente bip di sistema se fallisce
-
-        // Manteniamo i puntatori alla memoria non gestita
-        private IntPtr _ptrMuteOn = IntPtr.Zero;
-        private IntPtr _ptrMuteOff = IntPtr.Zero;
-
-        /// <summary>
-        /// Carica i suoni dagli Assets di Avalonia.
-        /// Esempio path: "avares://NomeTuoProgetto/Assets/mute_on.wav"
-        /// </summary>
-        public SoundManager(Uri uriMuteOn, Uri uriMuteOff)
+        get => (int)(_currentVolume * 100);
+        set
         {
-            _ptrMuteOn = LoadAssetToMemory(uriMuteOn);
-            _ptrMuteOff = LoadAssetToMemory(uriMuteOff);
-        }
-
-        private IntPtr LoadAssetToMemory(Uri assetUri)
-        {
-            try
+            float newVol = Math.Clamp(value, 0, 100) / 100f;
+            if (Math.Abs(_currentVolume - newVol) > 0.01f)
             {
-                // 1. Apri lo stream con AssetLoader
-                using (Stream stream = AssetLoader.Open(assetUri))
-                {
-                    // 2. Leggi tutto lo stream in un array di byte gestito
-                    byte[] data = new byte[stream.Length];
-                    stream.ReadExactly(data);
-
-                    // 3. Alloca memoria non gestita (HGlobal)
-                    IntPtr pUnmanagedBytes = Marshal.AllocHGlobal(data.Length);
-
-                    // 4. Copia i byte dall'array gestito alla memoria non gestita
-                    Marshal.Copy(data, 0, pUnmanagedBytes, data.Length);
-
-                    return pUnmanagedBytes;
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[SoundManager] Errore caricamento asset {assetUri}: {ex.Message}");
-                return IntPtr.Zero;
+                _currentVolume = newVol;
+                UpdateVolumeBuffers(); // Ricalcola l'audio
             }
         }
+    }
 
-        public void PlayMuted()
-        {
-            Play(_ptrMuteOn);
-        }
+    public SoundManager(Uri uriOn, Uri uriOff)
+    {
+        // 1. Carica i dati grezzi dagli Assets in array di byte gestiti
+        _originalOnBytes = LoadAssetBytes(uriOn);
+        _originalOffBytes = LoadAssetBytes(uriOff);
 
-        public void PlayUnmuted()
-        {
-            Play(_ptrMuteOff);
-        }
+        _sizeOn = _originalOnBytes.Length;
+        _sizeOff = _originalOffBytes.Length;
 
-        private void Play(IntPtr ptrSound)
+        // 2. Crea i buffer iniziali (Volume 100%)
+        UpdateVolumeBuffers();
+    }
+
+    private byte[] LoadAssetBytes(Uri uri)
+    {
+        try
         {
-            if (ptrSound != IntPtr.Zero)
+            using (var stream = AssetLoader.Open(uri))
+            using (var ms = new MemoryStream())
             {
-                // Passiamo il puntatore alla memoria e il flag SND_MEMORY
-                PlaySound(ptrSound, IntPtr.Zero, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+                stream.CopyTo(ms);
+                return ms.ToArray();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Errore caricamento {uri}: {ex.Message}");
+            return Array.Empty<byte>();
+        }
+    }
+
+    private void UpdateVolumeBuffers()
+    {
+        // Libera la memoria precedente
+        FreeMemory();
+
+        // Genera nuovi buffer con il volume applicato
+        _ptrPlayableOn = CreateVolumeScaledBuffer(_originalOnBytes, _currentVolume);
+        _ptrPlayableOff = CreateVolumeScaledBuffer(_originalOffBytes, _currentVolume);
+    }
+
+    private IntPtr CreateVolumeScaledBuffer(byte[] original, float volume)
+    {
+        if (original.Length == 0) return IntPtr.Zero;
+
+        // Copia l'array originale
+        byte[] processed = new byte[original.Length];
+        Array.Copy(original, processed, original.Length);
+
+        // --- PCM SCALING (Magia del Volume) ---
+        // Un file WAV ha un header di 44 byte. I dati audio iniziano dopo.
+        // Assumiamo 16-bit PCM (standard). 
+        // Ogni campione sono 2 byte (short).
+        
+        int headerSize = 44; // Standard WAV header size
+        
+        // Se il volume è 1.0 (100%), non facciamo calcoli (risparmio CPU)
+        if (volume < 0.99f)
+        {
+            for (int i = headerSize; i < processed.Length - 1; i += 2)
+            {
+                // Leggi il campione a 16 bit
+                short sample = BitConverter.ToInt16(processed, i);
+                
+                // Applica il volume
+                sample = (short)(sample * volume);
+                
+                // Scrivi indietro i byte
+                byte[] bytes = BitConverter.GetBytes(sample);
+                processed[i] = bytes[0];
+                processed[i + 1] = bytes[1];
             }
         }
 
-        // Pulizia della memoria quando chiudi l'app
-        public void Dispose()
-        {
-            if (_ptrMuteOn != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(_ptrMuteOn);
-                _ptrMuteOn = IntPtr.Zero;
-            }
+        // Alloca memoria non gestita per PlaySound
+        IntPtr ptr = Marshal.AllocHGlobal(processed.Length);
+        Marshal.Copy(processed, 0, ptr, processed.Length);
+        return ptr;
+    }
 
-            if (_ptrMuteOff != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(_ptrMuteOff);
-                _ptrMuteOff = IntPtr.Zero;
-            }
+    public void PlayMuted() => Play(_ptrPlayableOn);
+    public void PlayUnmuted() => Play(_ptrPlayableOff);
+
+    private void Play(IntPtr ptr)
+    {
+        if (ptr != IntPtr.Zero)
+        {
+            // SND_MEMORY dice a Windows di leggere dal puntatore RAM
+            PlaySound(ptr, IntPtr.Zero, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
         }
+    }
+
+    private void FreeMemory()
+    {
+        if (_ptrPlayableOn != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(_ptrPlayableOn);
+            _ptrPlayableOn = IntPtr.Zero;
+        }
+        if (_ptrPlayableOff != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(_ptrPlayableOff);
+            _ptrPlayableOff = IntPtr.Zero;
+        }
+    }
+
+    public void Dispose()
+    {
+        FreeMemory();
     }
 }
