@@ -44,6 +44,9 @@ public partial class MainWindow : Window
     
     private static Avalonia.Media.Imaging.Bitmap mutedImg;
     private static Avalonia.Media.Imaging.Bitmap unmutedImg;
+    private static WindowIcon mutedIcon;
+    private static WindowIcon unmutedIcon;
+
     
     private HiddenRawInputWindow hiddenWindowInstance = null;
     
@@ -55,6 +58,7 @@ public partial class MainWindow : Window
     public struct POINT { public int X; public int Y; }
 
     private NativeMenuItem _muteBtn;
+    private TrayIcon _trayIcon;
     
     public MainWindow()
     {
@@ -63,10 +67,13 @@ public partial class MainWindow : Window
         #region Load Images
         using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/muted.png"));
         mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
-        stream.Dispose();
         
         using var stream2 = AssetLoader.Open(new Uri("avares://MuteMe/Assets/unmuted.png"));
         unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
+        
+        mutedIcon = new WindowIcon(stream);
+        unmutedIcon = new WindowIcon(stream2);
+        stream.Dispose();
         stream2.Dispose();
         #endregion
         
@@ -102,9 +109,9 @@ public partial class MainWindow : Window
     
     private void SetupTrayIcon()
     {
-        var trayIcon = new TrayIcon
+        _trayIcon = new TrayIcon
         {
-            Icon = this.Icon, // Usa l'icona della finestra principale
+            Icon = unmutedIcon,
             ToolTipText = "Mute Me"
         };
 
@@ -130,8 +137,8 @@ public partial class MainWindow : Window
         exitItem.Click += (s, e) => Environment.Exit(0);
         menu.Add(exitItem);
 
-        trayIcon.Menu = menu;
-        trayIcon.IsVisible = true;
+        _trayIcon.Menu = menu;
+        _trayIcon.IsVisible = true;
     }
 
     private void OpenVolumePopup()
@@ -185,11 +192,13 @@ public partial class MainWindow : Window
         {
             SoundManager.PlayMuted();
             _muteBtn.IsChecked = true;
+            _trayIcon.Icon = mutedIcon;
         }
         else
         {
             SoundManager.PlayUnmuted();
             _muteBtn.IsChecked = false;
+            _trayIcon.Icon = unmutedIcon;
         }
     }
 

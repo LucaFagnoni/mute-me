@@ -9,30 +9,4 @@
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>
-    
-    <TrayIcon.Icons>
-        <TrayIcons>
-            <TrayIcon 
-                Icon="avares://MuteMe/Assets/unmuted.ico" 
-                ToolTipText="Avalonia Tray Icon ToolTip">
-                <TrayIcon.Menu>
-                    <NativeMenu>
-                        <NativeMenuItem Header="Modifiers">
-                            <NativeMenu>
-                                <NativeMenuItem Header="None" CommandParameter="0x0000" ToggleType="Radio" IsChecked="True"></NativeMenuItem>
-                                <NativeMenuItem Header="Alt" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
-                                <NativeMenuItem Header="Control" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
-                                <NativeMenuItem Header="Shift" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
-                                <NativeMenuItem Header="Win" ToggleType="Radio" IsChecked="False"></NativeMenuItem>
-                            </NativeMenu>
-                        </NativeMenuItem>
-                        <NativeMenuItem Header="Safe Mode" ToggleType="CheckBox" IsChecked="True"></NativeMenuItem>
-                        <NativeMenuItem Header="Mute" ToggleType="CheckBox"></NativeMenuItem>
-                        <NativeMenuItemSeparator/>
-                        <NativeMenuItem Header="Quit" Click="Quit_OnClick"></NativeMenuItem>
-                    </NativeMenu>
-                </TrayIcon.Menu>
-            </TrayIcon>
-        </TrayIcons>
-    </TrayIcon.Icons>
 </Application>
