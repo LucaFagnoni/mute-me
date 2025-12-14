@@ -10,12 +10,12 @@
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         Position="2, 2"
-        Width="25"
-        Height="25">
+        Width="10"
+        Height="10">
     <Image x:Name="microphoneStatusIcon" Source="avares://MuteMe/Assets/unmuted.png"
            RenderOptions.BitmapInterpolationMode="MediumQuality"
            Stretch="Uniform"
            HorizontalAlignment="Center"
            VerticalAlignment="Center"
-           Opacity="0.9"/>
+           Opacity="0.7"/>
 </Window>

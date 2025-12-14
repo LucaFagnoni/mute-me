@@ -1,7 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using Avalonia.Controls;
-using Mute_Me;
+﻿using System.Runtime.InteropServices;
 
 public static class MicrophoneController
 {
@@ -24,13 +21,10 @@ public static class MicrophoneController
             IntPtr h = GetForegroundWindow();
             SendMessageW(h, WM_APPCOMMAND, IntPtr.Zero, (IntPtr)APPCOMMAND_MICROPHONE_VOLUME_MUTE);
             IsMuted = mute;
-            
-            //TODO: Update icon
-            //TODO: Save Mic State
         }
         catch (Exception ex)
         {
-            return;
+            // ignored
         }
     }
 }

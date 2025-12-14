@@ -1,0 +1,20 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Mute_Me.HotkeyPopup"
+        Title="Hotkey"
+        Width="250" Height="80"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent"
+        TransparencyLevelHint="AcrylicBlur"
+        ExtendClientAreaToDecorationsHint="True">
+
+    <Border Background="#202020" BorderBrush="#FF5555" BorderThickness="2" CornerRadius="10">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="RECORDING" Foreground="#FF5555" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Waiting for key..." Foreground="White" Margin="0,5,0,0" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</Window>

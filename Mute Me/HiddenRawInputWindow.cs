@@ -1,52 +1,41 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 public class HiddenRawInputWindow
 {
-    // Costanti Win32
     private const uint WM_INPUT = 0x00FF;
     private const uint RIDEV_INPUTSINK = 0x00000100;
     private const uint RID_INPUT = 0x10000003;
     
-    // HWND_MESSAGE: crea una finestra che non appare mai, usata solo per i messaggi
     private static readonly IntPtr HWND_MESSAGE = new IntPtr(-3);
 
     private IntPtr _hwnd = IntPtr.Zero;
     private bool _isRegistered;
-    private WndProcDelegate _wndProc; // Mantiene vivo il delegato per il GC
+    private WndProcDelegate _wndProc;
     private string _className = "HiddenRawInputWindow_Class_Unicode";
 
     public event Action<int>? KeyPressed;
     
-    // ----------------------
-    // START
-    // ----------------------
     public void Start()
     {
-        // 1. Creiamo il delegato e lo salviamo per evitare che il GC lo raccolga
+        // Creating and saving delegate to prevent GC
         _wndProc = WndProc;
 
         try
         {
-            // 2. Registriamo la classe
             RegisterWindowClass();
-
-            // 3. Creiamo la finestra
             CreateHiddenWindow();
 
-            // 4. Se la finestra esiste, registriamo il Raw Input
             if (_hwnd != IntPtr.Zero)
             {
                 RegisterForRawInput(_hwnd);
             }
         }
         catch (Exception ex)
-        { }
+        {
+            // ignored
+        }
     }
-
-    // ----------------------
-    // STOP
-    // ----------------------
+    
     public void Stop()
     {
         try
@@ -61,12 +50,11 @@ public class HiddenRawInputWindow
             UnregisterClass(_className, GetModuleHandle(null));
         }
         catch (Exception ex)
-        { }
+        {
+            // ignored
+        }
     }
-
-    // ----------------------
-    // 1. REGISTRAZIONE CLASSE
-    // ----------------------
+    
     private void RegisterWindowClass()
     {
         var wc = new WNDCLASSEX
@@ -86,13 +74,10 @@ public class HiddenRawInputWindow
         { }
         else
         {
-            throw new Exception($"RegisterClassEx fallito. Codice Errore: {err}");
+            throw new Exception($"RegisterClassEx failed. Error code: {err}");
         }
     }
-
-    // ----------------------
-    // 2. CREAZIONE FINESTRA
-    // ----------------------
+    
     private void CreateHiddenWindow()
     {
         _hwnd = CreateWindowEx(
@@ -112,10 +97,7 @@ public class HiddenRawInputWindow
             int err = Marshal.GetLastWin32Error();
         }
     }
-
-    // ----------------------
-    // 3. RAW INPUT
-    // ----------------------
+    
     private void RegisterForRawInput(IntPtr hwnd)
     {
         RAWINPUTDEVICE[] rid = new RAWINPUTDEVICE[1];
@@ -145,10 +127,7 @@ public class HiddenRawInputWindow
         RegisterRawInputDevices(rid, 1, (uint)Marshal.SizeOf<RAWINPUTDEVICE>());
         _isRegistered = false;
     }
-
-    // ----------------------
-    // WNDPROC
-    // ----------------------
+    
     private IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         if (msg == WM_INPUT)
@@ -185,16 +164,14 @@ public class HiddenRawInputWindow
             }
         }
         catch (Exception ex)
-        { }
+        {
+            // ignored
+        }
         finally
         {
             Marshal.FreeHGlobal(buffer);
         }
     }
-
-    // ----------------------
-    // DEFINIZIONI PINVOKE (UNICODE FORZATO)
-    // ----------------------
     
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WNDCLASSEX
