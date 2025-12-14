@@ -1,0 +1,55 @@
+name: Build & Release Windows Exe
+
+# Si attiva SOLO quando pushi un TAG che inizia con 'v' (es. v1.0.0)
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Single Exe
+    runs-on: windows-latest
+
+    steps:
+    # 1. Scarica il codice
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Installa .NET 9
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    # 3. Ripristina i pacchetti
+    - name: Restore dependencies
+      run: dotnet restore
+
+    # 4. Compila e Pubblica
+    # Il comando genera i file nella cartella ./publish
+    - name: Publish Application
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained -o ./publish
+
+    # 5. Carica l'artifact (opzionale, per scaricarlo dai dettagli dell'action)
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MuteMe-Executable
+        # Cerca qualsiasi file .exe nella cartella publish
+        path: ./publish/*.exe
+
+    # 6. Crea la Release e allega direttamente l'EXE
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        # Prende tutti i file .exe dalla cartella publish (dovrebbe essercene uno solo)
+        files: ./publish/*.exe
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
