@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+		<ApplicationIcon>Assets\appicon.ico</ApplicationIcon>
+		
+		<Version>1.0.1</Version>
+        <Authors>Luca Fagnoni</Authors>
+        <Product>MuteMe</Product>
+		
         <AssemblyName>MuteMe</AssemblyName>
         <OutputType>WinExe</OutputType>
         <!-- net9.0-windows è sufficiente e più snello -->
