@@ -6,7 +6,6 @@ Designed specifically for **gamers**, it utilizes **Raw Input** to detect keystr
 
 ![Status](https://img.shields.io/badge/Platform-Windows-blue)
 ![Build](https://img.shields.io/badge/.NET-9.0-purple)
-![License](https://img.shields.io/badge/License-MIT-green)
 
 ## ✨ Key Features
 
@@ -51,8 +50,7 @@ If you want to modify the code or build the app yourself:
 **Commands:**
 
 ## Clone the repository
-git clone https://github.com/LucaFagnoni/mute-me.git
-cd MuteMe
+```git clone https://github.com/LucaFagnoni/mute-me.git```
 
 ## Publish in Release mode (Single File, Self Contained, Native AOT)
 dotnet publish -c Release -r win-x64
