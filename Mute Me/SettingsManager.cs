@@ -1,17 +1,15 @@
 ﻿using System.Text;
 
-namespace Mute_Me;
-
 public class SettingsManager
 {
+    private static readonly string Path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "user.cfg");
+
     public int SfxVolume { get; set; } = 100;
     public bool RequireShift { get; set; } = false;
     public bool RequireCtrl { get; set; } = false;
     public bool RequireAlt { get; set; } = false;
-    public int CurrentHotkey { get; set; } = 124; // Default F13
-    
-    private static readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "user.cfg");
-    
+    public int CurrentHotkey { get; set; } = 124;
+
     public void Save()
     {
         try
@@ -22,64 +20,33 @@ public class SettingsManager
             sb.AppendLine($"RequireCtrl={RequireCtrl}");
             sb.AppendLine($"RequireAlt={RequireAlt}");
             sb.AppendLine($"CurrentHotkey={CurrentHotkey}");
-
-            File.WriteAllText(ConfigPath, sb.ToString());
+            File.WriteAllText(Path, sb.ToString());
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[SettingsManager] Saving error: {ex.Message}");
-        }
+        catch { }
     }
 
     public static SettingsManager Load()
     {
-        var settings = new SettingsManager();
-
-        if (!File.Exists(ConfigPath))
-        {
-            settings.Save();
-            return settings;
-        }
-
+        var s = new SettingsManager();
+        if (!File.Exists(Path)) return s;
         try
         {
-            string[] lines = File.ReadAllLines(ConfigPath);
-            
-            foreach (var line in lines)
+            foreach (var line in File.ReadAllLines(Path))
             {
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#")) continue;
-
-                var parts = line.Split('=');
-                if (parts.Length != 2) continue;
-
-                string key = parts[0].Trim();
-                string value = parts[1].Trim();
-
-                switch (key)
+                var p = line.Split('=');
+                if (p.Length != 2) continue;
+                var v = p[1].Trim();
+                switch (p[0].Trim())
                 {
-                    case "SfxVolume":
-                        if (int.TryParse(value, out int vol)) settings.SfxVolume = Math.Clamp(vol, 0, 100);
-                        break;
-                    case "RequireShift":
-                        if (bool.TryParse(value, out bool shift)) settings.RequireShift = shift;
-                        break;
-                    case "RequireCtrl":
-                        if (bool.TryParse(value, out bool ctrl)) settings.RequireCtrl = ctrl;
-                        break;
-                    case "RequireAlt":
-                        if (bool.TryParse(value, out bool alt)) settings.RequireAlt = alt;
-                        break;
-                    case "CurrentHotkey":
-                        if (int.TryParse(value, out int hotkey)) settings.CurrentHotkey = hotkey;
-                        break;
+                    case "SfxVolume": int.TryParse(v, out int vol); s.SfxVolume = vol; break;
+                    case "RequireShift": bool.TryParse(v, out bool sh); s.RequireShift = sh; break;
+                    case "RequireCtrl": bool.TryParse(v, out bool ct); s.RequireCtrl = ct; break;
+                    case "RequireAlt": bool.TryParse(v, out bool al); s.RequireAlt = al; break;
+                    case "CurrentHotkey": int.TryParse(v, out int hk); s.CurrentHotkey = hk; break;
                 }
             }
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[SettingsManager] Loading Error: {ex.Message}");
-        }
-
-        return settings;
+        catch { }
+        return s;
     }
 }
