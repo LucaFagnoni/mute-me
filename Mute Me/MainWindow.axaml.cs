@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia.Controls;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -36,6 +37,7 @@ public partial class MainWindow : Window
     private HiddenRawInputWindow _hiddenWindowInstance;
     private SettingsManager _settingsManager;
     private SoundManager _soundManager;
+    private AutoStartManager _autoStartManager;
     
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X; public int Y; }
@@ -53,32 +55,105 @@ public partial class MainWindow : Window
     private NativeMenuItem _muteBtn;
     private TrayIcon _trayIcon;
     
+    
+    private void LogToFile(string message)
+    {
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string path = Path.Combine(desktop, "MuteMe_Debug.txt");
+            File.AppendAllText(path, $"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
+        }
+        catch { /* Niente da fare se fallisce il log */ }
+    }
+    
     public MainWindow()
     {
         InitializeComponent();
         
-        _settingsManager = SettingsManager.Load();
+        LogToFile("=== AVVIO APPLICAZIONE ===");
+        
+        try 
+        {
+            _settingsManager = SettingsManager.Load();
+            LogToFile("Settings caricati.");
+        }
+        catch(Exception ex) { LogToFile($"Errore Settings: {ex.Message}"); }
+        
+        string assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? "Mute_Me";
+        LogToFile($"Nome Assembly Rilevato: '{assemblyName}'");
         
         #region Load Images
-        using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/muted.png"));
-        _mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
-        
-        using var stream2 = AssetLoader.Open(new Uri("avares://MuteMe/Assets/unmuted.png"));
-        _unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
-        
-        _mutedIcon = new WindowIcon(stream);
-        _unmutedIcon = new WindowIcon(stream2);
-        stream.Dispose();
-        stream2.Dispose();
+        try 
+        {
+            // var uriMuted = new Uri("avares://MuteMe/Assets/muted.png");
+            string uriMutedString = $"avares://{assemblyName}/Assets/muted.png";
+            LogToFile($"Tentativo caricamento: {uriMutedString}");
+            
+            var uriMuted = new Uri(uriMutedString);
+            using (var stream = AssetLoader.Open(uriMuted))
+            {
+                _mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
+                LogToFile("-> Bitmap Muted OK");
+            }
+            using (var streamIcon = AssetLoader.Open(uriMuted))
+            {
+                _mutedIcon = new WindowIcon(streamIcon);
+                LogToFile("-> Icon Muted OK");
+            }
+            
+            // var uriUnmuted =new Uri("avares://MuteMe/Assets/unmuted.png");
+            string uriUnmutedString = $"avares://{assemblyName}/Assets/unmuted.png";
+            LogToFile($"Tentativo caricamento: {uriUnmutedString}");
+            
+            var uriUnmuted = new Uri(uriUnmutedString);
+            using (var stream2 = AssetLoader.Open(uriUnmuted))
+            {
+                _unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
+                LogToFile("-> Bitmap Unmuted OK");
+            }
+            using (var streamIcon2 = AssetLoader.Open(uriUnmuted))
+            {
+                _unmutedIcon = new WindowIcon(streamIcon2);
+                LogToFile("-> Icon Unmuted OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogToFile($"!!! ERRORE ASSETS VISIVI: {ex.Message}");
+            LogToFile($"StackTrace: {ex.StackTrace}");
+            
+            _mutedIcon = this.Icon;
+            _unmutedIcon = this.Icon;
+        }
+        // using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/muted.png"));
+        // _mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
+        //
+        // using var stream2 = AssetLoader.Open(new Uri("avares://MuteMe/Assets/unmuted.png"));
+        // _unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
+        //
+        // _mutedIcon = new WindowIcon(stream);
+        // _unmutedIcon = new WindowIcon(stream2);
+        // stream.Dispose();
+        // stream2.Dispose();
         #endregion
         
         #region Load Sounds
-        Uri uriMuteSnd = new Uri("avares://MuteMe/Assets/mute.wav");
-        Uri uriUnmuteSnd = new Uri("avares://MuteMe/Assets/unmute.wav");
-        Uri uriNotiSnd = new Uri("avares://MuteMe/Assets/notification.wav");
-        
-        _soundManager = new SoundManager(uriMuteSnd, uriUnmuteSnd, uriNotiSnd);
-        _soundManager.Volume = _settingsManager.SfxVolume;
+        try
+        {
+            LogToFile("Caricamento Suoni...");
+            Uri uriMuteSnd = new Uri("avares://MuteMe/Assets/mute.wav");
+            Uri uriUnmuteSnd = new Uri("avares://MuteMe/Assets/unmute.wav");
+            Uri uriNotiSnd = new Uri("avares://MuteMe/Assets/notification.wav");
+            
+            _soundManager = new SoundManager(uriMuteSnd, uriUnmuteSnd, uriNotiSnd);
+            _soundManager.Volume = _settingsManager.SfxVolume;
+            LogToFile("SoundManager Inizializzato.");
+        }
+        catch (Exception ex)
+        {
+            LogToFile($"!!! ERRORE AUDIO: {ex.Message}");
+        }
         #endregion
         
         try
@@ -86,17 +161,19 @@ public partial class MainWindow : Window
             _hiddenWindowInstance = new HiddenRawInputWindow();
             _hiddenWindowInstance.KeyPressed += OnRawKeyPressed;
             _hiddenWindowInstance.Start();
+            LogToFile("RawInput Avviato.");
         }
         catch (Exception ex)
         {
-            // ignored
+            LogToFile($"Errore RawInput: {ex.Message}");
         }
 
+        _autoStartManager = new AutoStartManager();
         SetupTrayIcon();
-        
         LoadModifiers();
         
         Opened += (_, _) => EnableClickThrough();
+        LogToFile("Costruttore completato. Nascondo finestra.");
     }
 
     private void EnableClickThrough()
@@ -110,6 +187,7 @@ public partial class MainWindow : Window
     
     private void SetupTrayIcon()
     {
+        LogToFile("Inizio SetupTrayIcon...");
         _trayIcon = new TrayIcon
         {
             Icon = _unmutedIcon,
@@ -130,6 +208,7 @@ public partial class MainWindow : Window
         _muteBtn.IsChecked = false;
         _muteBtn.Click += (s, e) => ToggleMicrophone();
         menu.Add(_muteBtn);
+        LogToFile("Menu Volume e Mute aggiunti.");
         
         // 3. Modifiers Menu
         var modifierMenuItem = new NativeMenuItem("Modifiers");
@@ -171,16 +250,50 @@ public partial class MainWindow : Window
         modMenu.Add(_modifierAlt);
         modifierMenuItem.Menu = modMenu;
         menu.Add(modifierMenuItem);
+        LogToFile("Menu Modifiers aggiunto.");
         
         // 4. Set Hotkey Button
         _hotkeyMenuItem = new NativeMenuItem($"Set Hotkey (Current: {_settingsManager.CurrentHotkey})");
         _hotkeyMenuItem.Click += (_, _) => StartRecordingHotkey();
         menu.Add(_hotkeyMenuItem);
+        LogToFile("Menu Hotkey aggiunto.");
+        
+        // 5. Set Admin Auto Start with Windows
+        var autoStartItem = new NativeMenuItem("Loading...");
+        autoStartItem.ToggleType = NativeMenuItemToggleType.CheckBox;
+        LogToFile("Chiamata InitializeAutoStartItem...");
+        InitializeAutoStartItem(autoStartItem);
+        autoStartItem.Click += async (_, _) =>
+        {
+            autoStartItem.Header = "Working...";
+            autoStartItem.IsEnabled = false; 
 
-        // 5. Separator
+            bool isActive = await _autoStartManager.IsStartupTaskActiveAsync();
+
+            if (isActive)
+            {
+                await _autoStartManager.UninstallStartupTaskAsync();
+            }
+            else
+            {
+                await _autoStartManager.InstallStartupTaskAsync();
+            }
+            
+            bool nowActive = await _autoStartManager.IsStartupTaskActiveAsync();
+            
+            Dispatcher.UIThread.Post(() => 
+            {
+                autoStartItem.IsChecked = nowActive;
+                autoStartItem.Header = "Auto Start (Admin)";
+                autoStartItem.IsEnabled = true; 
+            });
+        };
+        menu.Add(autoStartItem);
+
+        // 6. Separator
         menu.Add(new NativeMenuItemSeparator());
         
-        // 6. Uscita
+        // 7. Uscita
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) => Environment.Exit(0);
         menu.Add(exitItem);
@@ -189,7 +302,28 @@ public partial class MainWindow : Window
         _trayIcon.IsVisible = true;
         #endregion
     }
-
+    
+    private async void InitializeAutoStartItem(NativeMenuItem item)
+    {
+        try
+        {
+            LogToFile("Dentro InitializeAutoStartItem: Chiamata IsStartupTaskActiveAsync...");
+            bool active = await _autoStartManager.IsStartupTaskActiveAsync();
+            LogToFile($"IsStartupTaskActiveAsync completato. Risultato: {active}");
+            
+            Dispatcher.UIThread.Post(() => 
+            {
+                item.IsChecked = active;
+                item.Header = "Auto Start (Admin)";
+            });
+        }
+        catch (Exception ex)
+        {
+            LogToFile($"!!! CRASH IN AUTOSTART INIT: {ex.Message}");
+            LogToFile(ex.StackTrace);
+        }
+    }
+    
     private void ResetModifierRequirements()
     {
         _settingsManager.RequireShift = false;
@@ -312,6 +446,16 @@ public partial class MainWindow : Window
             _muteBtn.IsChecked = false;
             _trayIcon.Icon = _unmutedIcon;
         }
+    }
+    
+    private async void CheckAutoStartStatus(NativeMenuItem item)
+    {
+        bool active = await _autoStartManager.IsStartupTaskActiveAsync();
+        // Aggiorna UI
+        Dispatcher.UIThread.Post(() => 
+        {
+            item.Header = active ? "✔ Avvio Automatico (Admin)" : "Avvio Automatico (Admin)";
+        });
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
