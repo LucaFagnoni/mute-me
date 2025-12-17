@@ -1,4 +1,3 @@
-using System.Reflection;
 using Avalonia.Controls;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -14,168 +13,119 @@ public partial class MainWindow : Window
     private const int WS_EX_TRANSPARENT = 0x20;
     private const int WS_EX_LAYERED = 0x80000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
-    
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-    
-    // MODIFIER KEYS
-    private const int VK_SHIFT = 0x10;
-    private const int VK_CONTROL = 0x11;
-    private const int VK_MENU = 0x12; // ALT
-    
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     
-    private static Avalonia.Media.Imaging.Bitmap _mutedImg;
-    private static Avalonia.Media.Imaging.Bitmap _unmutedImg;
-    private static WindowIcon _mutedIcon;
-    private static WindowIcon _unmutedIcon;
-    
-    private HiddenRawInputWindow _hiddenWindowInstance;
-    private SettingsManager _settingsManager;
-    private SoundManager _soundManager;
-    private AutoStartManager _autoStartManager;
-    
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT { public int X; public int Y; }
-    
+    // MODIFIER KEYS
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+    private const int VK_SHIFT = 0x10;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_MENU = 0x12; // ALT
+
     // MODIFIER REFERENCES
     private NativeMenuItem _modifierNone; 
     private NativeMenuItem _modifierShift; 
     private NativeMenuItem _modifierCtrl; 
     private NativeMenuItem _modifierAlt; 
     
+    // MANAGERS
+    private SettingsManager _settingsManager;
+    private SoundManager _soundManager;
+    private AutoStartManager _autoStartManager;
+    private HiddenRawInputWindow _hiddenWindowInstance;
+    
+    // UI RESOURCES
+    private static WindowIcon? _mutedIcon;
+    private static WindowIcon? _unmutedIcon;
+    private static Avalonia.Media.Imaging.Bitmap? _mutedImg;
+    private static Avalonia.Media.Imaging.Bitmap? _unmutedImg;
+    private TrayIcon? _trayIcon;
+    private NativeMenuItem? _hotkeyMenuItem;
+    private NativeMenuItem? _muteBtn;
+    
+    // STATE
     private bool _isRecording = false;
     private HotkeyPopup? _activePopup; 
-    
-    private NativeMenuItem _hotkeyMenuItem;
-    private NativeMenuItem _muteBtn;
-    private TrayIcon _trayIcon;
-    
-    
-    private void LogToFile(string message)
-    {
-        try
-        {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string path = Path.Combine(desktop, "MuteMe_Debug.txt");
-            File.AppendAllText(path, $"{DateTime.Now:HH:mm:ss} - {message}{Environment.NewLine}");
-        }
-        catch { /* Niente da fare se fallisce il log */ }
-    }
     
     public MainWindow()
     {
         InitializeComponent();
         
-        LogToFile("=== AVVIO APPLICAZIONE ===");
+        _settingsManager = SettingsManager.Load();
+        _autoStartManager = new AutoStartManager();
         
-        try 
-        {
-            _settingsManager = SettingsManager.Load();
-            LogToFile("Settings caricati.");
-        }
-        catch(Exception ex) { LogToFile($"Errore Settings: {ex.Message}"); }
-        
-        string assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? "Mute_Me";
-        LogToFile($"Nome Assembly Rilevato: '{assemblyName}'");
+        // string assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? "Mute_Me";
         
         #region Load Images
         try 
         {
-            // var uriMuted = new Uri("avares://MuteMe/Assets/muted.png");
-            string uriMutedString = $"avares://{assemblyName}/Assets/muted.png";
-            LogToFile($"Tentativo caricamento: {uriMutedString}");
+            var uriMuted = $"avares://MuteMe/Assets/muted.png";
+
+            _mutedImg = LoadBitmap(uriMuted);
+            _mutedIcon = LoadIcon(uriMuted);
             
-            var uriMuted = new Uri(uriMutedString);
-            using (var stream = AssetLoader.Open(uriMuted))
-            {
-                _mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
-                LogToFile("-> Bitmap Muted OK");
-            }
-            using (var streamIcon = AssetLoader.Open(uriMuted))
-            {
-                _mutedIcon = new WindowIcon(streamIcon);
-                LogToFile("-> Icon Muted OK");
-            }
-            
-            // var uriUnmuted =new Uri("avares://MuteMe/Assets/unmuted.png");
-            string uriUnmutedString = $"avares://{assemblyName}/Assets/unmuted.png";
-            LogToFile($"Tentativo caricamento: {uriUnmutedString}");
-            
-            var uriUnmuted = new Uri(uriUnmutedString);
-            using (var stream2 = AssetLoader.Open(uriUnmuted))
-            {
-                _unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
-                LogToFile("-> Bitmap Unmuted OK");
-            }
-            using (var streamIcon2 = AssetLoader.Open(uriUnmuted))
-            {
-                _unmutedIcon = new WindowIcon(streamIcon2);
-                LogToFile("-> Icon Unmuted OK");
-            }
+            var uriUnmuted =$"avares://MuteMe/Assets/unmuted.png";
+            _unmutedImg = LoadBitmap(uriUnmuted);
+            _unmutedIcon = LoadIcon(uriUnmuted);
         }
         catch (Exception ex)
         {
-            LogToFile($"!!! ERRORE ASSETS VISIVI: {ex.Message}");
-            LogToFile($"StackTrace: {ex.StackTrace}");
-            
             _mutedIcon = this.Icon;
             _unmutedIcon = this.Icon;
         }
-        // using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/muted.png"));
-        // _mutedImg = new Avalonia.Media.Imaging.Bitmap(stream);
-        //
-        // using var stream2 = AssetLoader.Open(new Uri("avares://MuteMe/Assets/unmuted.png"));
-        // _unmutedImg = new Avalonia.Media.Imaging.Bitmap(stream2);
-        //
-        // _mutedIcon = new WindowIcon(stream);
-        // _unmutedIcon = new WindowIcon(stream2);
-        // stream.Dispose();
-        // stream2.Dispose();
         #endregion
         
         #region Load Sounds
         try
         {
-            LogToFile("Caricamento Suoni...");
             Uri uriMuteSnd = new Uri("avares://MuteMe/Assets/mute.wav");
             Uri uriUnmuteSnd = new Uri("avares://MuteMe/Assets/unmute.wav");
             Uri uriNotiSnd = new Uri("avares://MuteMe/Assets/notification.wav");
             
             _soundManager = new SoundManager(uriMuteSnd, uriUnmuteSnd, uriNotiSnd);
             _soundManager.Volume = _settingsManager.SfxVolume;
-            LogToFile("SoundManager Inizializzato.");
         }
-        catch (Exception ex)
-        {
-            LogToFile($"!!! ERRORE AUDIO: {ex.Message}");
-        }
+        catch (Exception ex) { }
         #endregion
         
+        #region Setup Raw Input
         try
         {
             _hiddenWindowInstance = new HiddenRawInputWindow();
             _hiddenWindowInstance.KeyPressed += OnRawKeyPressed;
             _hiddenWindowInstance.Start();
-            LogToFile("RawInput Avviato.");
         }
-        catch (Exception ex)
-        {
-            LogToFile($"Errore RawInput: {ex.Message}");
-        }
-
-        _autoStartManager = new AutoStartManager();
+        catch (Exception ex) { }
+        #endregion
+        
         SetupTrayIcon();
-        LoadModifiers();
         
         Opened += (_, _) => EnableClickThrough();
-        LogToFile("Costruttore completato. Nascondo finestra.");
     }
 
+    private WindowIcon? LoadIcon(string uri)
+    {
+        try 
+        { 
+            using var s = AssetLoader.Open(new Uri(uri)); 
+            return new WindowIcon(s); 
+        } 
+        catch { return this.Icon; }
+    }
+    
+    private Avalonia.Media.Imaging.Bitmap? LoadBitmap(string uri)
+    {
+        try 
+        { 
+            using var s = AssetLoader.Open(new Uri(uri)); 
+            return new Avalonia.Media.Imaging.Bitmap(s); 
+        } 
+        catch { return null; }
+    }
+    
     private void EnableClickThrough()
     {
         var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
@@ -187,7 +137,6 @@ public partial class MainWindow : Window
     
     private void SetupTrayIcon()
     {
-        LogToFile("Inizio SetupTrayIcon...");
         _trayIcon = new TrayIcon
         {
             Icon = _unmutedIcon,
@@ -208,86 +157,26 @@ public partial class MainWindow : Window
         _muteBtn.IsChecked = false;
         _muteBtn.Click += (s, e) => ToggleMicrophone();
         menu.Add(_muteBtn);
-        LogToFile("Menu Volume e Mute aggiunti.");
         
-        // 3. Modifiers Menu
+        // 3. Modifiers Submenu
         var modifierMenuItem = new NativeMenuItem("Modifiers");
         var modMenu = new NativeMenu();
-        _modifierNone = new NativeMenuItem("None");
-        _modifierNone.ToggleType = NativeMenuItemToggleType.Radio;
-        _modifierNone.Click += (_, _) =>
-        {
-            ResetModifierRequirements();
-            _settingsManager.Save();
-        };
-        _modifierShift = new NativeMenuItem("Shift");
-        _modifierShift.ToggleType = NativeMenuItemToggleType.Radio;
-        _modifierShift.Click += (_, _) =>
-        {
-            ResetModifierRequirements();
-            _settingsManager.RequireShift =  true;
-            _settingsManager.Save();
-        }; 
-        _modifierCtrl = new NativeMenuItem("Ctrl");
-        _modifierCtrl.ToggleType = NativeMenuItemToggleType.Radio;
-        _modifierCtrl.Click += (_, _) =>
-        {
-            ResetModifierRequirements();
-            _settingsManager.RequireCtrl = true;
-            _settingsManager.Save();
-        }; 
-        _modifierAlt = new NativeMenuItem("Alt");
-        _modifierAlt.ToggleType = NativeMenuItemToggleType.Radio;
-        _modifierAlt.Click += (_, _) =>
-        {
-            ResetModifierRequirements();
-            _settingsManager.RequireAlt = true;
-            _settingsManager.Save();
-        }; 
-        modMenu.Add(_modifierNone);
-        modMenu.Add(_modifierShift);
-        modMenu.Add(_modifierCtrl);
-        modMenu.Add(_modifierAlt);
+        modMenu.Add(CreateRadioItem("None", () => SetModifier(false, false, false), _settingsManager is {RequireShift: false, RequireCtrl: false, RequireAlt: false}));
+        modMenu.Add(CreateRadioItem("Shift", () => SetModifier(true, false, false), _settingsManager.RequireShift));
+        modMenu.Add(CreateRadioItem("Ctrl", () => SetModifier(false, true, false), _settingsManager.RequireCtrl));
+        modMenu.Add(CreateRadioItem("Alt", () => SetModifier(false, false, true), _settingsManager.RequireAlt));
         modifierMenuItem.Menu = modMenu;
         menu.Add(modifierMenuItem);
-        LogToFile("Menu Modifiers aggiunto.");
         
         // 4. Set Hotkey Button
         _hotkeyMenuItem = new NativeMenuItem($"Set Hotkey (Current: {_settingsManager.CurrentHotkey})");
         _hotkeyMenuItem.Click += (_, _) => StartRecordingHotkey();
         menu.Add(_hotkeyMenuItem);
-        LogToFile("Menu Hotkey aggiunto.");
         
         // 5. Set Admin Auto Start with Windows
         var autoStartItem = new NativeMenuItem("Loading...");
         autoStartItem.ToggleType = NativeMenuItemToggleType.CheckBox;
-        LogToFile("Chiamata InitializeAutoStartItem...");
         InitializeAutoStartItem(autoStartItem);
-        autoStartItem.Click += async (_, _) =>
-        {
-            autoStartItem.Header = "Working...";
-            autoStartItem.IsEnabled = false; 
-
-            bool isActive = await _autoStartManager.IsStartupTaskActiveAsync();
-
-            if (isActive)
-            {
-                await _autoStartManager.UninstallStartupTaskAsync();
-            }
-            else
-            {
-                await _autoStartManager.InstallStartupTaskAsync();
-            }
-            
-            bool nowActive = await _autoStartManager.IsStartupTaskActiveAsync();
-            
-            Dispatcher.UIThread.Post(() => 
-            {
-                autoStartItem.IsChecked = nowActive;
-                autoStartItem.Header = "Auto Start (Admin)";
-                autoStartItem.IsEnabled = true; 
-            });
-        };
         menu.Add(autoStartItem);
 
         // 6. Separator
@@ -295,7 +184,12 @@ public partial class MainWindow : Window
         
         // 7. Uscita
         var exitItem = new NativeMenuItem("Exit");
-        exitItem.Click += (_, _) => Environment.Exit(0);
+        exitItem.Click += (_, _) =>
+        {
+            _hiddenWindowInstance?.Stop();
+            _soundManager?.Dispose();
+            Environment.Exit(0);
+        };
         menu.Add(exitItem);
 
         _trayIcon.Menu = menu;
@@ -303,58 +197,62 @@ public partial class MainWindow : Window
         #endregion
     }
     
-    private async void InitializeAutoStartItem(NativeMenuItem item)
+    private NativeMenuItem CreateRadioItem(string text, Action action, bool isChecked)
     {
-        try
-        {
-            LogToFile("Dentro InitializeAutoStartItem: Chiamata IsStartupTaskActiveAsync...");
-            bool active = await _autoStartManager.IsStartupTaskActiveAsync();
-            LogToFile($"IsStartupTaskActiveAsync completato. Risultato: {active}");
-            
-            Dispatcher.UIThread.Post(() => 
-            {
-                item.IsChecked = active;
-                item.Header = "Auto Start (Admin)";
-            });
-        }
-        catch (Exception ex)
-        {
-            LogToFile($"!!! CRASH IN AUTOSTART INIT: {ex.Message}");
-            LogToFile(ex.StackTrace);
-        }
-    }
-    
-    private void ResetModifierRequirements()
-    {
-        _settingsManager.RequireShift = false;
-        _settingsManager.RequireCtrl = false;
-        _settingsManager.RequireAlt = false;
+        var item = new NativeMenuItem(text) { ToggleType = NativeMenuItemToggleType.Radio, IsChecked = isChecked };
+        item.Click += (_, _) => action();
+        return item;
     }
 
-    private void LoadModifiers()
+    private void SetModifier(bool shift, bool crtl, bool alt)
     {
-        if(_settingsManager is {RequireShift: false, RequireCtrl: false, RequireAlt: false}) _modifierNone.IsChecked = true;
-        if(_settingsManager.RequireShift) _modifierShift.IsChecked = true;
-        if(_settingsManager.RequireCtrl) _modifierCtrl.IsChecked = true;
-        if(_settingsManager.RequireAlt) _modifierAlt.IsChecked = true;
+        _settingsManager.RequireShift = shift;
+        _settingsManager.RequireCtrl = crtl;
+        _settingsManager.RequireAlt = alt;
+        _settingsManager.Save();
+    }
+    
+    private async void InitializeAutoStartItem(NativeMenuItem item)
+    {
+        bool active = await _autoStartManager.IsStartupTaskActiveAsync();
+        UpdateAutoStartItem(item, active);
+
+        item.Click += async (_, _) =>
+        {
+            item.IsEnabled = false;
+            item.Header = "Working...";
+            
+            if (await _autoStartManager.IsStartupTaskActiveAsync())
+                await _autoStartManager.UninstallStartupTaskAsync();
+            else
+                await _autoStartManager.InstallStartupTaskAsync();
+
+            bool newState = await _autoStartManager.IsStartupTaskActiveAsync();
+            UpdateAutoStartItem(item, newState);
+            item.IsEnabled = true;
+        };
+    }
+    
+    private void UpdateAutoStartItem(NativeMenuItem item, bool active)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            item.IsChecked = active;
+            item.Header = "Auto Start (Admin)";
+        });
     }
     
     private void StartRecordingHotkey()
     {
-        // Avoids double-clicking
         if (_isRecording) return;
 
         _isRecording = true;
         _soundManager.PlayNoti();
-
-        // Show hotkey recording window
-        // Dispatcher.UIThread.Post ensures the UI is created on the correct thread
+        
         Dispatcher.UIThread.Post(() =>
         {
             _activePopup = new HotkeyPopup();
-            
             _activePopup.Canceled += () => _isRecording = false;
-
             _activePopup.Show();
         });
     }
@@ -366,7 +264,7 @@ public partial class MainWindow : Window
         popup.VolumeChanged += (newVol) => 
         {
             _settingsManager.SfxVolume = newVol;
-            _soundManager.Volume = _settingsManager.SfxVolume;
+            _soundManager.Volume = newVol;
             _settingsManager.Save();
         };
 
@@ -376,7 +274,6 @@ public partial class MainWindow : Window
             [DllImport("user32.dll")]
             static extern bool GetCursorPos(out POINT lpPoint);
             GetCursorPos(out POINT p);
-        
             popup.Position = new PixelPoint(p.X - 100, p.Y - 60);
         }
 
@@ -392,13 +289,11 @@ public partial class MainWindow : Window
             
             _settingsManager.CurrentHotkey = vKey;
             _isRecording = false;
-
             _settingsManager.Save();
             
             Dispatcher.UIThread.Post(() => 
             {
-                _hotkeyMenuItem.Header = $"Cambia Hotkey (Codice: {_settingsManager.CurrentHotkey})";
-
+                _hotkeyMenuItem.Header = $"Chang Hotkey (Code: {_settingsManager.CurrentHotkey})";
                 _activePopup?.Close();
                 _activePopup = null;
             });
@@ -447,16 +342,6 @@ public partial class MainWindow : Window
             _trayIcon.Icon = _unmutedIcon;
         }
     }
-    
-    private async void CheckAutoStartStatus(NativeMenuItem item)
-    {
-        bool active = await _autoStartManager.IsStartupTaskActiveAsync();
-        // Aggiorna UI
-        Dispatcher.UIThread.Post(() => 
-        {
-            item.Header = active ? "✔ Avvio Automatico (Admin)" : "Avvio Automatico (Admin)";
-        });
-    }
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
@@ -466,4 +351,7 @@ public partial class MainWindow : Window
         MicrophoneController.SetMicMuted(false);
         base.OnClosing(e);
     }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int X; public int Y; }
 }
