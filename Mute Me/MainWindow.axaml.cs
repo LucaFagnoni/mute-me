@@ -24,12 +24,6 @@ public partial class MainWindow : Window
     private const int VK_SHIFT = 0x10;
     private const int VK_CONTROL = 0x11;
     private const int VK_MENU = 0x12; // ALT
-
-    // MODIFIER REFERENCES
-    private NativeMenuItem _modifierNone; 
-    private NativeMenuItem _modifierShift; 
-    private NativeMenuItem _modifierCtrl; 
-    private NativeMenuItem _modifierAlt; 
     
     // MANAGERS
     private SettingsManager _settingsManager;
@@ -56,8 +50,6 @@ public partial class MainWindow : Window
         
         _settingsManager = SettingsManager.Load();
         _autoStartManager = new AutoStartManager();
-        
-        // string assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? "Mute_Me";
         
         #region Load Images
         try 
@@ -144,8 +136,7 @@ public partial class MainWindow : Window
         };
 
         var menu = new NativeMenu();
-
-        #region Tray Icon Menu Setup
+        
         // 1. SFX Volume
         var volumeItem = new NativeMenuItem("Sfx Volume");
         volumeItem.Click += (_, _) => OpenVolumePopup();
@@ -175,7 +166,6 @@ public partial class MainWindow : Window
         
         // 5. Set Admin Auto Start with Windows
         var autoStartItem = new NativeMenuItem("Loading...");
-        autoStartItem.ToggleType = NativeMenuItemToggleType.CheckBox;
         InitializeAutoStartItem(autoStartItem);
         menu.Add(autoStartItem);
 
@@ -194,7 +184,6 @@ public partial class MainWindow : Window
 
         _trayIcon.Menu = menu;
         _trayIcon.IsVisible = true;
-        #endregion
     }
     
     private NativeMenuItem CreateRadioItem(string text, Action action, bool isChecked)
@@ -214,6 +203,8 @@ public partial class MainWindow : Window
     
     private async void InitializeAutoStartItem(NativeMenuItem item)
     {
+        item.ToggleType = NativeMenuItemToggleType.CheckBox;
+        
         bool active = await _autoStartManager.IsStartupTaskActiveAsync();
         UpdateAutoStartItem(item, active);
 
