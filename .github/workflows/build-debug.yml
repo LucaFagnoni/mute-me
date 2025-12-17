@@ -1,0 +1,34 @@
+name: Build Debug
+
+on:
+  workflow_dispatch: # Permette di avviare la build manualmente da GitHub
+  push:
+    branches: [ "main" ] # Avvia la build ad ogni push su main (opzionale)
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout del codice
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Ripristina dipendenze
+      run: dotnet restore
+
+    - name: Pubblica (Debug - Single File)
+      # Nota: -p:DebugType=full assicura che i simboli di debug (PDB) siano inclusi
+      # -p:PublishSingleFile=true crea un unico exe
+      run: |
+        dotnet publish -c Debug -r win-x64 --self-contained -p:PublishSingleFile=true -p:DebugType=full -o ./publish_output
+
+    - name: Carica Artefatto
+      uses: actions/upload-artifact@v4
+      with:
+        name: MuteMe-Debug-Build
+        path: ./publish_output

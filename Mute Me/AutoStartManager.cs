@@ -76,37 +76,52 @@ public class AutoStartManager
     {
         if (!IsAdministrator()) return;
 
-        string appExePath = Process.GetCurrentProcess().MainModule.FileName;
+        // 1. USA ENVIRONMENT.PROCESSPATH (Fondamentale per Native AOT / Single File)
+        string? appExePath = Environment.ProcessPath;
+    
+        if (string.IsNullOrEmpty(appExePath))
+        {
+            // Fallback estremo se ProcessPath è nullo
+            appExePath = Process.GetCurrentProcess().MainModule?.FileName;
+        }
+
+        if (string.IsNullOrEmpty(appExePath)) return;
+
+        // 2. Ottieni la cartella di lavoro reale
         string workingDir = Path.GetDirectoryName(appExePath) ?? "";
 
-        // XML Task Configuration
-        string taskXml = $@"
-        <?xml version=""1.0"" encoding=""UTF-16""?>
-        <Task version=""1.2"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
-          <Triggers>
-            <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
-          </Triggers>
-          <Principals>
-            <Principal id=""Author"">
-              <LogonType>InteractiveToken</LogonType>
-              <RunLevel>HighestAvailable</RunLevel>
-            </Principal>
-          </Principals>
-          <Settings>
-            <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-            <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-            <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-            <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-            <Priority>7</Priority>
-          </Settings>
-          <Actions Context=""Author"">
-            <Exec>
-              <Command>{System.Security.SecurityElement.Escape(appExePath)}</Command>
-              <WorkingDirectory>{System.Security.SecurityElement.Escape(workingDir)}</WorkingDirectory>
-            </Exec>
-          </Actions>
-        </Task>
-        ";
+        string schTasksExe = GetSchTasksPath();
+
+        // 3. Costruzione XML con Escape rigoroso
+        string taskXml = $@"<?xml version=""1.0"" encoding=""UTF-16""?>
+<Task version=""1.2"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id=""Author"">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context=""Author"">
+    <Exec>
+      <Command>""{appExePath}""</Command>
+      <WorkingDirectory>""{workingDir}""</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>";
+
+        // Notare le virgolette aggiuntive "" attorno a appExePath nell'XML sopra.
 
         string tempXml = Path.GetTempFileName();
         try
@@ -114,7 +129,6 @@ public class AutoStartManager
             File.WriteAllText(tempXml, taskXml);
             await RunSchTasksAsync($"/Create /TN \"{TASK_NAME}\" /XML \"{tempXml}\" /F");
         }
-        catch {  }
         finally
         {
             if (File.Exists(tempXml)) File.Delete(tempXml);

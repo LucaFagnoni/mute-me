@@ -33,7 +33,7 @@ jobs:
     # Il comando genera i file nella cartella ./publish
     - name: Publish Application
       run: |
-        dotnet publish -c Release -r win-x64 --self-contained -o ./publish
+        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:PublishSingleFile=true -o ./publish
 
     # 5. Carica l'artifact (opzionale, per scaricarlo dai dettagli dell'action)
     - name: Upload Artifact
