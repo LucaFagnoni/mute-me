@@ -1,56 +1,62 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 
 namespace Mute_Me;
 
 public static class MicrophoneController
 {
     public static bool IsMuted = false;
+
+    // P/Invoke manuale per CoCreateInstance (Bypassa il problema del costruttore AOT)
+    [DllImport("ole32.dll", ExactSpelling = true, PreserveSig = false)]
+    private static extern void CoCreateInstance(
+        [In, MarshalAs(UnmanagedType.LPStruct)] Guid rclsid,
+        IntPtr pUnkOuter,
+        uint dwClsContext,
+        [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+    // CLSID di MMDeviceEnumerator
+    private static Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+    // IID di IMMDeviceEnumerator
+    private static Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
     
-    [DllImport("user32.dll", SetLastError = false)]
-    public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll", SetLastError = false)]
-    public static extern IntPtr SendMessageW(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
-    
-    private const int WM_APPCOMMAND = 0x319;
-    private const int APPCOMMAND_MICROPHONE_VOLUME_MUTE = 0x180000;
-    
-    public static void SetMicMuted(bool mute)
-    {
-        try
-        {
-            if (IsMuted == mute) return;
-            
-            IntPtr h = GetForegroundWindow();
-            SendMessageW(h, WM_APPCOMMAND, IntPtr.Zero, (IntPtr)APPCOMMAND_MICROPHONE_VOLUME_MUTE);
-            IsMuted = mute;
-        }
-        catch (Exception ex)
-        {
-            // ignored
-        }
-    }
-    
+    private const uint CLSCTX_ALL = 23; // Supporta server in-process, locali, ecc.
+
     public static bool GetMicrophoneMuteStatus()
     {
-        var deviceEnumerator = new MMDeviceEnumerator() as IMMDeviceEnumerator;
-        IMMDevice speakers = null;
-        IAudioEndpointVolume vol = null;
+        IMMDeviceEnumerator? enumerator = null;
+        IMMDevice? speakers = null;
+        IAudioEndpointVolume? vol = null;
 
         try
         {
-            deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eCapture, ERole.eMultimedia, out speakers);
+            // 1. Creiamo l'istanza COM manualmente senza usare 'new'
+            CoCreateInstance(
+                CLSID_MMDeviceEnumerator, 
+                IntPtr.Zero, 
+                CLSCTX_ALL, 
+                IID_IMMDeviceEnumerator, 
+                out object objEnumerator);
             
+            enumerator = (IMMDeviceEnumerator)objEnumerator;
+
+            // 2. Ottieni il dispositivo di cattura
+            enumerator.GetDefaultAudioEndpoint(EDataFlow.eCapture, ERole.eMultimedia, out speakers);
+
+            // 3. Attiva l'interfaccia Volume
             Guid IID_IAudioEndpointVolume = typeof(IAudioEndpointVolume).GUID;
             speakers.Activate(ref IID_IAudioEndpointVolume, 0, IntPtr.Zero, out object o);
             vol = (IAudioEndpointVolume)o;
-            
+
+            // 4. Leggi stato
             vol.GetMute(out bool isMuted);
             
+            // Allinea stato locale
             IsMuted = isMuted; 
-            
             return isMuted;
         }
-        catch (Exception)
+        catch
         {
             return false;
         }
@@ -58,19 +64,38 @@ public static class MicrophoneController
         {
             if (vol != null) Marshal.ReleaseComObject(vol);
             if (speakers != null) Marshal.ReleaseComObject(speakers);
-            if (deviceEnumerator != null) Marshal.ReleaseComObject(deviceEnumerator);
+            if (enumerator != null) Marshal.ReleaseComObject(enumerator);
         }
     }
 
-    #region Core Audio API Definitions
-    [ComImport]
-    [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-    private class MMDeviceEnumerator
+    public static void SetMicMuted(bool mute)
     {
+        // ... (Il resto del metodo SetMicMuted rimane invariato o puoi usare la logica COM sopra per settare il mute) ...
+        // Per ora manteniamo la tua logica SendMessageW se funzionava, altrimenti 
+        // puoi usare vol.SetMute(mute, Guid.Empty) nell'interfaccia sopra.
+        
+        try
+        {
+            if (IsMuted == mute) return;
+            // Usa SendMessageW esistente...
+            IntPtr h = GetForegroundWindow();
+            SendMessageW(h, 0x319, IntPtr.Zero, (IntPtr)0x180000);
+            IsMuted = mute;
+        }
+        catch { }
     }
 
+    // --- P/INVOKE PER SENDMESSAGE (Il tuo codice vecchio) ---
+    [DllImport("user32.dll", SetLastError = false)]
+    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError = false)]
+    private static extern IntPtr SendMessageW(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+    // --- INTERFACCE COM (Necessarie per GetMicrophoneMuteStatus) ---
+    // NOTA: Usa 'internal' per AOT, non private
+    
     [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IMMDeviceEnumerator
+    internal interface IMMDeviceEnumerator
     {
         void NotImpl1();
         [PreserveSig]
@@ -78,45 +103,25 @@ public static class MicrophoneController
     }
 
     [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IMMDevice
+    internal interface IMMDevice
     {
         [PreserveSig]
         int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
     }
 
     [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IAudioEndpointVolume
+    internal interface IAudioEndpointVolume
     {
-        void NotImpl1(); // RegisterControlChangeNotify
-        void NotImpl2(); // UnregisterControlChangeNotify
-        void NotImpl3(); // GetChannelCount
-        void NotImpl4(); // SetMasterVolumeLevel
-        void NotImpl5(); // SetMasterVolumeLevelScalar
-        void NotImpl6(); // GetMasterVolumeLevel
-        void NotImpl7(); // GetMasterVolumeLevelScalar
-        void NotImpl8(); // SetChannelVolumeLevel
-        void NotImpl9(); // SetChannelVolumeLevelScalar
-        void NotImpl10(); // GetChannelVolumeLevel
-        void NotImpl11(); // GetChannelVolumeLevelScalar
-        void NotImpl12(); // SetMute
+        void NotImpl1(); void NotImpl2(); void NotImpl3(); void NotImpl4(); void NotImpl5(); 
+        void NotImpl6(); void NotImpl7(); void NotImpl8(); void NotImpl9(); void NotImpl10(); 
+        void NotImpl11(); 
+        
+        void SetMute([In] bool bMute, [In] Guid pguidEventContext); // Metodo aggiunto per completezza
+        
         [PreserveSig]
         int GetMute(out bool pbMute);
     }
 
-    private enum EDataFlow
-    {
-        eRender,
-        eCapture, // Microphone
-        eAll,
-        EDataFlow_enum_count
-    }
-
-    private enum ERole
-    {
-        eConsole,
-        eMultimedia,
-        eCommunications,
-        ERole_enum_count
-    }
-    #endregion
+    internal enum EDataFlow { eRender, eCapture, eAll }
+    internal enum ERole { eConsole, eMultimedia, eCommunications }
 }

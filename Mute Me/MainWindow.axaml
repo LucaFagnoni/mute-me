@@ -12,7 +12,7 @@
         Position="2, 2"
         Width="10"
         Height="10">
-    <Image x:Name="microphoneStatusIcon" Source="avares://MuteMe/Assets/unmuted.png"
+    <Image x:Name="microphoneStatusIcon"
            RenderOptions.BitmapInterpolationMode="MediumQuality"
            Stretch="Uniform"
            HorizontalAlignment="Center"

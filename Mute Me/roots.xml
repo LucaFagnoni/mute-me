@@ -1,0 +1,12 @@
+<linker>
+  <!-- DEVE ESSERE UGUALE AL TUO NUOVO <AssemblyName> -->
+  <assembly fullname="MuteMe" preserve="all" />
+
+  <!-- Preserva Avalonia e componenti di sistema -->
+  <assembly fullname="Avalonia.Themes.Fluent" preserve="all" />
+  <assembly fullname="Avalonia.Base" preserve="all" />
+  <assembly fullname="Avalonia.Controls" preserve="all" />
+  <assembly fullname="Avalonia.Markup.Xaml" preserve="all" />
+  <assembly fullname="System.Runtime.InteropServices" preserve="all" />
+  <assembly fullname="System.ComponentModel.TypeConverter" preserve="all" />
+</linker>

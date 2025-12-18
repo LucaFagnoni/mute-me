@@ -1,58 +1,53 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-		<ApplicationIcon>Assets\appicon.ico</ApplicationIcon>
-		
-		<Version>1.0.1</Version>
-        <Authors>Luca Fagnoni</Authors>
-        <Product>MuteMe</Product>
-		
-        <AssemblyName>MuteMe</AssemblyName>
+		<AssemblyName>MuteMe</AssemblyName>
         <OutputType>WinExe</OutputType>
-        <!-- net9.0-windows è sufficiente e più snello -->
         <TargetFramework>net9.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         
-        <!-- CONFIGURAZIONE AVALONIA -->
-        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-        
-        <!-- OTTIMIZZAZIONI NATIVE AOT (SIZE) -->
-        <PublishAot>false</PublishAot>
-		<PublishTrimmed>false</PublishTrimmed>
-		<PublishSingleFile>true</PublishSingleFile>
+        <!-- CONFIGURAZIONE NATIVE AOT & SIZE -->
+        <PublishAot>true</PublishAot>
+        <PublishTrimmed>true</PublishTrimmed>
+        <TrimMode>link</TrimMode>
         <SelfContained>true</SelfContained>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		
-		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
         
-        <!-- Risparmia spazio rimuovendo i dati di localizzazione globali (Date, Valute, ecc.) -->
-        <!-- Se la tua app è solo in Inglese/Italiano semplice, questo taglia ~2MB -->
-        <InvariantGlobalization>true</InvariantGlobalization>
+        <!-- Abilita il Trimming aggressivo -->
         
-        <!-- Rimuove totalmente i simboli di debug -->
+        <!-- Collega il file roots.xml per evitare che rompa il codice -->
+        <TrimmerRootDescriptor>roots.xml</TrimmerRootDescriptor>
+
+        <!-- FONDAMENTALE PER IL MICROFONO: Abilita il vecchio sistema COM in AOT -->
+        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+
+        <!-- Rimuove simboli di debug e dati inutili -->
         <DebugType>none</DebugType>
         <DebugSymbols>false</DebugSymbols>
         <StripSymbols>true</StripSymbols>
+        
+        <!-- Rimuove dati di localizzazione (Date/Valute estere) - Risparmia ~3MB -->
+        <InvariantGlobalization>true</InvariantGlobalization>
+        
+        <!-- Avalonia Config -->
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     </PropertyGroup>
 
     <ItemGroup>
-		<TrimmerRootAssembly Include="MuteMe" />
         <PackageReference Include="Avalonia" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Desktop" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1"/>
         
-        <!-- NOTA: Questo font "Inter" pesa circa 2.5 MB. 
-             Se vuoi l'app piccolissima, rimuovi questa riga e usa i font di sistema (Segoe UI). -->
-        <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.1"/>
-
-        <!-- Rimuove le librerie di diagnostica quando NON sei in Debug -->
+        <!-- NOTA: HO RIMOSSO "Avalonia.Fonts.Inter". 
+             Questo pacchetto pesa 2.5 MB. Avalonia userà il font di sistema (Segoe UI). -->
+             
+        <!-- Diagnostica solo in Debug -->
         <PackageReference Include="Avalonia.Diagnostics" Version="11.2.1" Condition="'$(Configuration)' == 'Debug'" />
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Include tutti i file nella cartella Assets come risorse Avalonia -->
         <AvaloniaResource Include="Assets\**" />
+        <!-- Includiamo roots.xml nel progetto ma non nell'output compilato -->
+        <None Include="roots.xml" /> 
     </ItemGroup>
 </Project>
