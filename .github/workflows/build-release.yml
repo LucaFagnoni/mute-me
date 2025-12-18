@@ -36,7 +36,7 @@ jobs:
     - name: Pulizia file inutili
       # Rimuove eventuali file .pdb o file di configurazione XML residui, lasciando solo l'EXE
       run: |
-        cd publish_output
+        cd publish
         Get-ChildItem -Path . -Exclude *.exe | Remove-Item -Force
 
     - name: Carica Artefatto (EXE)
