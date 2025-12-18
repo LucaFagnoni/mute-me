@@ -1,10 +1,13 @@
-name: Build Release (Native AOT)
+name: Build & Release Executable
 
 on:
-  workflow_dispatch: # Permette l'avvio manuale
+  workflow_dispatch:
   push:
     tags:
-      - 'v*' # Si avvia automaticamente se pushi un tag (es. "v1.0.0")
+      - 'v*' # Esegue la build solo quando pusho un tag (es. v1.0)
+
+permissions:
+  contents: write # FONDAMENTALE: Serve per permettere all'action di creare la Release
 
 jobs:
   build:
@@ -22,35 +25,29 @@ jobs:
     - name: Ripristina dipendenze
       run: dotnet restore
 
-    - name: Pubblica (Release - Native AOT)
-      # Spiegazione flag:
-      # -c Release: Configurazione ottimizzata
-      # -r win-x64: Target Windows 64bit
-      # -p:PublishAot=true: Attiva compilazione nativa
-      # -p:PublishTrimmed=true: Attiva rimozione codice inutile
-      # -p:TrimMode=link: Modalità trim aggressiva (sicura grazie a roots.xml)
-      # -p:StripSymbols=true: Rimuove simboli di debug dall'exe
+    - name: Pubblica (Native AOT)
+      # Nota: Ho cambiato l'output in ./publish come richiesto
       run: |
         dotnet publish -c Release -r win-x64 --self-contained -p:PublishAot=true -p:PublishTrimmed=true -p:TrimMode=link -p:PublishSingleFile=true -p:StripSymbols=true -o ./publish
 
-    - name: Pulizia file inutili
-      # Rimuove eventuali file .pdb o file di configurazione XML residui, lasciando solo l'EXE
-      run: |
-        cd publish
-        Get-ChildItem -Path . -Exclude *.exe | Remove-Item -Force
+    # (Opzionale) Rinomina l'exe per includere la versione o pulire il nome
+    # - name: Rinomina Eseguibile
+    #   run: ren ./publish/MuteMe.exe MuteMe_App.exe
 
-    - name: Carica Artefatto (EXE)
+    # 1. Carica come Artefatto (GitHub lo zipperà comunque nella UI "Actions")
+    - name: Upload Artifact (Internal)
       uses: actions/upload-artifact@v4
       with:
-        name: MuteMe-App
-        path: ./publish/*.exe
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+        name: MuteMe-Artifact
+        path: ./publish/MuteMe.exe 
+        # Puntando al file specifico, lo zip conterrà solo l'exe senza cartelle
+
+    # 2. Crea una RELEASE (Qui scarichi l'EXE vero e proprio!)
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        # Prende tutti i file .exe dalla cartella publish (dovrebbe essercene uno solo)
-        files: ./publish/*.exe
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        files: ./publish/MuteMe.exe
+        draft: false
+        prerelease: false
+        # Nota: Questo step caricherà MuteMe.exe nella sezione "Releases" a destra del tuo repo.
