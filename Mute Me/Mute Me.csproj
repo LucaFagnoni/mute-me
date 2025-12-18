@@ -19,9 +19,13 @@
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         
         <!-- OTTIMIZZAZIONI NATIVE AOT (SIZE) -->
-        <PublishAot>true</PublishAot>
+        <PublishAot>false</PublishAot>
+		<PublishTrimmed>false</PublishTrimmed>
+		<PublishSingleFile>true</PublishSingleFile>
         <SelfContained>true</SelfContained>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
         
         <!-- Risparmia spazio rimuovendo i dati di localizzazione globali (Date, Valute, ecc.) -->
         <!-- Se la tua app è solo in Inglese/Italiano semplice, questo taglia ~2MB -->
@@ -34,6 +38,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+		<TrimmerRootAssembly Include="MuteMe" />
         <PackageReference Include="Avalonia" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Desktop" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1"/>

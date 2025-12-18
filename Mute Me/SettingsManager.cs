@@ -1,5 +1,7 @@
 ﻿using System.Text;
 
+namespace Mute_Me;
+
 public class SettingsManager
 {
     private static readonly string Path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "user.cfg");

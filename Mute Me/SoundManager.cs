@@ -1,6 +1,8 @@
 ﻿using System.Runtime.InteropServices;
 using Avalonia.Platform;
 
+namespace Mute_Me;
+
 public class SoundManager : IDisposable
 {
     [DllImport("winmm.dll")] private static extern bool PlaySound(IntPtr p, IntPtr h, uint f);

@@ -1,55 +1,39 @@
-name: Build & Release Windows Exe
+name: Build Release
 
-# Si attiva SOLO quando pushi un TAG che inizia con 'v' (es. v1.0.0)
 on:
+  workflow_dispatch:
   push:
     tags:
-      - 'v*'
-
-permissions:
-  contents: write
+      - 'v*' # Si attiva solo quando crei un tag (es. v1.0)
 
 jobs:
   build:
-    name: Build Single Exe
     runs-on: windows-latest
 
     steps:
-    # 1. Scarica il codice
-    - name: Checkout code
+    - name: Checkout del codice
       uses: actions/checkout@v4
 
-    # 2. Installa .NET 9
-    - name: Setup .NET
+    - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
 
-    # 3. Ripristina i pacchetti
-    - name: Restore dependencies
+    - name: Ripristina dipendenze
       run: dotnet restore
 
-    # 4. Compila e Pubblica
-    # Il comando genera i file nella cartella ./publish
-    - name: Publish Application
+    - name: Pubblica (Release - Single File)
+      # Forziamo le proprietà qui per essere sicuri
       run: |
-        dotnet publish -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:PublishSingleFile=true -o ./publish
+        dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:PublishTrimmed=false -p:PublishAot=false -o ./publish_output
 
-    # 5. Carica l'artifact (opzionale, per scaricarlo dai dettagli dell'action)
-    - name: Upload Artifact
+    - name: Rinomina Eseguibile
+      run: |
+        cd publish_output
+        Ren MuteMe.exe MuteMe_Release.exe
+
+    - name: Carica Artefatto
       uses: actions/upload-artifact@v4
       with:
-        name: MuteMe-Executable
-        # Cerca qualsiasi file .exe nella cartella publish
-        path: ./publish/*.exe
-
-    # 6. Crea la Release e allega direttamente l'EXE
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        # Prende tutti i file .exe dalla cartella publish (dovrebbe essercene uno solo)
-        files: ./publish/*.exe
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: MuteMe-Release-Build
+        path: ./publish_output

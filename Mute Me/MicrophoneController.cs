@@ -1,5 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 
+namespace Mute_Me;
+
 public static class MicrophoneController
 {
     public static bool IsMuted = false;

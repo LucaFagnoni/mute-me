@@ -2,6 +2,7 @@
 using System.Security.Principal;
 using System.Text;
 using Avalonia.Platform;
+
 namespace Mute_Me;
 
 public class AutoStartManager
