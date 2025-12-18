@@ -12,6 +12,7 @@
         <TrimMode>link</TrimMode>
         <SelfContained>true</SelfContained>
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         
         <!-- Abilita il Trimming aggressivo -->
         

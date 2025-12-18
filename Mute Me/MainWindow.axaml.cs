@@ -94,14 +94,9 @@ public partial class MainWindow : Window
         #endregion
 
         SetupTrayIcon();
-        SetMicrophoneStatus();
+        SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus() ?? false);
         
         Opened += (_, _) => EnableClickThrough();
-    }
-
-    private void SetMicrophoneStatus()
-    {
-        SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus());
     }
 
     private WindowIcon? LoadIcon(string uri)

@@ -1,123 +1,126 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling; // Fondamentale per il nuovo COM
 
 namespace Mute_Me;
 
-public static class MicrophoneController
+public static partial class MicrophoneController
 {
     public static bool IsMuted = false;
 
-    // --- P/INVOKE SETUP ---
-    [DllImport("user32.dll", SetLastError = false)]
-    private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll", SetLastError = false)]
-    private static extern IntPtr SendMessageW(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("ole32.dll", ExactSpelling = true, PreserveSig = false)]
-    private static extern void CoCreateInstance(
-        [In, MarshalAs(UnmanagedType.LPStruct)] Guid rclsid,
-        IntPtr pUnkOuter,
-        uint dwClsContext,
-        [In, MarshalAs(UnmanagedType.LPStruct)] Guid riid,
-        [MarshalAs(UnmanagedType.Interface)] out object ppv);
+    // --- P/INVOKE ---
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr GetForegroundWindow();
+    
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr SendMessageW(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
 
     // GUIDs
-    private static Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
-    private static Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
-    private static Guid IID_IAudioEndpointVolume = typeof(IAudioEndpointVolume).GUID;
+    private static readonly Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+    private static readonly Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
+    private static readonly Guid IID_IAudioEndpointVolume = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
 
-    // --- METODO LETTURA STATO ---
-    public static bool GetMicrophoneMuteStatus()
+    // CoCreateInstance that return raw IntPtr
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(
+        in Guid rclsid,
+        IntPtr pUnkOuter,
+        uint dwClsContext,
+        in Guid riid,
+        out IntPtr ppv);
+
+    public static bool? GetMicrophoneMuteStatus()
     {
-        IMMDeviceEnumerator? enumerator = null;
-        IMMDevice? speakers = null;
-        IAudioEndpointVolume? vol = null;
-
+        IntPtr ptrEnumerator = IntPtr.Zero;
+        
         try
         {
-            // 1. Crea Enumerator
-            CoCreateInstance(CLSID_MMDeviceEnumerator, IntPtr.Zero, 23, IID_IMMDeviceEnumerator, out object objEnumerator);
-            enumerator = (IMMDeviceEnumerator)objEnumerator;
+            // 1. Create raw COM instance (IntPtr)
+            int hr = CoCreateInstance(
+                CLSID_MMDeviceEnumerator, 
+                IntPtr.Zero, 
+                23, // CLSCTX_ALL
+                IID_IMMDeviceEnumerator, 
+                out ptrEnumerator);
 
-            // 2. Ottieni Default Device per eConsole (Ruolo 0 = Default System Device)
-            // eCapture = 1 (Microfono)
-            enumerator.GetDefaultAudioEndpoint(EDataFlow.eCapture, ERole.eConsole, out speakers);
+            if (hr != 0 || ptrEnumerator == IntPtr.Zero) return null;
 
-            // 3. Attiva interfaccia Volume
-            speakers.Activate(ref IID_IAudioEndpointVolume, 0, IntPtr.Zero, out object o);
-            vol = (IAudioEndpointVolume)o;
+            // 2. Wrap the pointer into the managed interface (GeneratedComInterface)
+            // This creates a managed object that is NOT a __ComObject
+            var strategy = new StrategyBasedComWrappers();
+            var enumerator = (IMMDeviceEnumerator)strategy.GetOrCreateObjectForComInstance(ptrEnumerator, CreateObjectFlags.None);
 
-            // 4. Leggi Mute
-            vol.GetMute(out bool isMuted);
+            // 3. Obtain Device (1 = eCapture, 0 = eConsole)
+            enumerator.GetDefaultAudioEndpoint(1, 0, out IMMDevice speakers);
+
+            // 4. Activate Volume
+            Guid iid = IID_IAudioEndpointVolume;
+            speakers.Activate(ref iid, 0, IntPtr.Zero, out IAudioEndpointVolume vol);
+
+            // 5. Read State
+            vol.GetMute(out int isMutedInt);
             
-            // Aggiorna lo stato statico interno
+            bool isMuted = isMutedInt != 0;
             IsMuted = isMuted;
             
             return isMuted;
         }
-        catch 
+        catch
         {
-            // Se fallisce, assumiamo false ma non crashiamo
-            return false;
-        }
-        finally
-        {
-            if (vol != null) Marshal.ReleaseComObject(vol);
-            if (speakers != null) Marshal.ReleaseComObject(speakers);
-            if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+            return null;
         }
     }
 
-    // --- METODO SCRITTURA (Toggle) ---
     public static void SetMicMuted(bool mute)
     {
-        // 1. Controlliamo lo stato reale PRIMA di agire
-        bool currentRealState = GetMicrophoneMuteStatus();
-
-        // Se lo stato reale è già quello desiderato, non facciamo nulla
-        if (currentRealState == mute) 
+        bool? realState = GetMicrophoneMuteStatus();
+        
+        if (realState.HasValue && realState.Value == mute)
         {
             IsMuted = mute;
             return;
         }
 
-        // Altrimenti inviamo il comando di Toggle
         try
         {
             IntPtr h = GetForegroundWindow();
-            SendMessageW(h, 0x319, IntPtr.Zero, (IntPtr)0x180000); // APPCOMMAND_MICROPHONE_VOLUME_MUTE
+            SendMessageW(h, 0x319, IntPtr.Zero, (IntPtr)0x180000);
             IsMuted = mute;
         }
         catch { }
     }
+}
 
-    // --- INTERFACCE COM INTERNAL (Per AOT) ---
-    [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IMMDeviceEnumerator
-    {
-        void NotImpl1();
-        [PreserveSig]
-        int GetDefaultAudioEndpoint(EDataFlow dataFlow, ERole role, out IMMDevice ppEndpoint);
-    }
+// --- INTERFACCE COM (Definite con il nuovo sistema) ---
 
-    [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IMMDevice
-    {
-        [PreserveSig]
-        int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
-    }
+[GeneratedComInterface]
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IMMDeviceEnumerator
+{
+    void NotImpl1();
+    
+    [PreserveSig]
+    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppEndpoint);
+}
 
-    [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    internal interface IAudioEndpointVolume
-    {
-        void NotImpl1(); void NotImpl2(); void NotImpl3(); void NotImpl4(); 
-        void NotImpl5(); void NotImpl6(); void NotImpl7(); void NotImpl8(); 
-        void NotImpl9(); void NotImpl10(); void NotImpl11(); void NotImpl12(); 
-        
-        [PreserveSig]
-        int GetMute(out bool pbMute);
-    }
+[GeneratedComInterface]
+[Guid("D666063F-1587-4E43-81F1-B948E807363F")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IMMDevice
+{
+    [PreserveSig]
+    int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, out IAudioEndpointVolume ppInterface);
+}
 
-    internal enum EDataFlow { eRender, eCapture, eAll }
-    internal enum ERole { eConsole, eMultimedia, eCommunications }
+[GeneratedComInterface]
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public partial interface IAudioEndpointVolume
+{
+    void NotImpl1(); void NotImpl2(); void NotImpl3(); void NotImpl4(); 
+    void NotImpl5(); void NotImpl6(); void NotImpl7(); void NotImpl8(); 
+    void NotImpl9(); void NotImpl10(); void NotImpl11(); void NotImpl12(); 
+    
+    [PreserveSig]
+    int GetMute(out int pbMute);
 }
