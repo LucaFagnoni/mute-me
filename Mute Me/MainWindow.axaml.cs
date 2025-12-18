@@ -92,10 +92,16 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { }
         #endregion
-        
+
         SetupTrayIcon();
+        SetMicrophoneStatus();
         
         Opened += (_, _) => EnableClickThrough();
+    }
+
+    private void SetMicrophoneStatus()
+    {
+        SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus());
     }
 
     private WindowIcon? LoadIcon(string uri)
@@ -146,7 +152,8 @@ public partial class MainWindow : Window
         _muteBtn = new NativeMenuItem("Mute");
         _muteBtn.ToggleType = NativeMenuItemToggleType.CheckBox;
         _muteBtn.IsChecked = false;
-        _muteBtn.Click += (s, e) => ToggleMicrophone();
+        // _muteBtn.Click += (s, e) => ToggleMicrophone();
+        _muteBtn.Click += (s, e) => SetMicrophone(!MicrophoneController.IsMuted);
         menu.Add(_muteBtn);
         
         // 3. Modifiers Submenu
@@ -172,12 +179,14 @@ public partial class MainWindow : Window
         // 6. Separator
         menu.Add(new NativeMenuItemSeparator());
         
-        // 7. Uscita
+        // 7. Exiting
         var exitItem = new NativeMenuItem("Exit");
         exitItem.Click += (_, _) =>
         {
+            _settingsManager.Save();
             _hiddenWindowInstance?.Stop();
             _soundManager?.Dispose();
+            MicrophoneController.SetMicMuted(false);
             Environment.Exit(0);
         };
         menu.Add(exitItem);
@@ -305,7 +314,8 @@ public partial class MainWindow : Window
 
         if (ctrlMatch && shiftMatch && altMatch)
         {
-            ToggleMicrophone();
+            // ToggleMicrophone();
+            SetMicrophone(!MicrophoneController.IsMuted);
         }
     }
     
@@ -315,22 +325,24 @@ public partial class MainWindow : Window
         // 16=Shift, 17=Ctrl, 18=Alt, 91=LWin, 92=RWin, 160-165=L/R Shift/Ctrl/Alt
         return (vk >= 16 && vk <= 18) || (vk == 91 || vk == 92) || (vk >= 160 && vk <= 165);
     }
-
-    private void ToggleMicrophone()
+    
+    private void SetMicrophone(bool isMuted)
     {
-        MicrophoneController.SetMicMuted(!MicrophoneController.IsMuted);
+        MicrophoneController.SetMicMuted(isMuted);
         microphoneStatusIcon.Source = MicrophoneController.IsMuted ? _mutedImg : _unmutedImg;
         if (MicrophoneController.IsMuted)
         {
             _soundManager.PlayMuted();
             _muteBtn.IsChecked = true;
             _trayIcon.Icon = _mutedIcon;
+            microphoneStatusIcon.Opacity = 0.8;
         }
         else
         {
             _soundManager.PlayUnmuted();
             _muteBtn.IsChecked = false;
             _trayIcon.Icon = _unmutedIcon;
+            microphoneStatusIcon.Opacity = 0.25;
         }
     }
 

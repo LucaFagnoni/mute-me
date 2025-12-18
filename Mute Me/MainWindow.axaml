@@ -17,5 +17,11 @@
            Stretch="Uniform"
            HorizontalAlignment="Center"
            VerticalAlignment="Center"
-           Opacity="0.7"/>
+           Opacity="0.25">
+        <Image.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.4" />
+            </Transitions>
+        </Image.Transitions>
+    </Image>
 </Window>
