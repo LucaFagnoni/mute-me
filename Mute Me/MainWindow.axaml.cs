@@ -18,6 +18,16 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, int uFlags);
+
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const int SWP_NOSIZE = 0x0001;
+    private const int SWP_NOMOVE = 0x0002;
+    private const int SWP_NOACTIVATE = 0x0010;
+    private const int SWP_SHOWWINDOW = 0x0040;
+
+    
     // MODIFIER KEYS
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
@@ -43,6 +53,8 @@ public partial class MainWindow : Window
     // STATE
     private bool _isRecording = false;
     private HotkeyPopup? _activePopup; 
+    private DispatcherTimer _topmostTimer;
+ 
     
     public MainWindow()
     {
@@ -93,6 +105,15 @@ public partial class MainWindow : Window
         catch (Exception ex) { }
         #endregion
 
+        // Start timer to enforce topmost
+        _topmostTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _topmostTimer.Tick += (s, e) => EnforceTopmost();
+        _topmostTimer.Start();
+
+
         SetupTrayIcon();
         SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus() ?? false);
         
@@ -128,6 +149,14 @@ public partial class MainWindow : Window
         SetWindowLong(handle, GWL_EXSTYLE, style | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW);
     }
     
+    private void EnforceTopmost()
+    {
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero) return;
+
+        SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+
     private void SetupTrayIcon()
     {
         _trayIcon = new TrayIcon
