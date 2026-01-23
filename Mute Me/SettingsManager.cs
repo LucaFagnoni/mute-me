@@ -11,6 +11,9 @@ public class SettingsManager
     public bool RequireCtrl { get; set; } = false;
     public bool RequireAlt { get; set; } = false;
     public int CurrentHotkey { get; set; } = 124;
+    public int IconCorner { get; set; } = 0; // 0=TopLeft, 1=TopRight, 2=BottomLeft, 3=BottomRight
+    public int IconMargin { get; set; } = 2;
+
 
     public void Save()
     {
@@ -22,6 +25,9 @@ public class SettingsManager
             sb.AppendLine($"RequireCtrl={RequireCtrl}");
             sb.AppendLine($"RequireAlt={RequireAlt}");
             sb.AppendLine($"CurrentHotkey={CurrentHotkey}");
+            sb.AppendLine($"IconCorner={IconCorner}");
+            sb.AppendLine($"IconMargin={IconMargin}");
+
             File.WriteAllText(Path, sb.ToString());
         }
         catch { }
@@ -45,7 +51,10 @@ public class SettingsManager
                     case "RequireCtrl": bool.TryParse(v, out bool ct); s.RequireCtrl = ct; break;
                     case "RequireAlt": bool.TryParse(v, out bool al); s.RequireAlt = al; break;
                     case "CurrentHotkey": int.TryParse(v, out int hk); s.CurrentHotkey = hk; break;
+                    case "IconCorner": int.TryParse(v, out int ic); s.IconCorner = ic; break;
+                    case "IconMargin": int.TryParse(v, out int im); s.IconMargin = im; break;
                 }
+
             }
         }
         catch { }

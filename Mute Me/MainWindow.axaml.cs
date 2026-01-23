@@ -118,7 +118,46 @@ public partial class MainWindow : Window
         SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus() ?? false);
         
         Opened += (_, _) => EnableClickThrough();
+        
+        UpdateIconPosition();
     }
+
+    private void UpdateIconPosition()
+    {
+        if (Screens.Primary == null) return;
+        
+        var screen = Screens.Primary.WorkingArea;
+        // Window size is 10x10 logical. Convert to pixels.
+        var scaling = Screens.Primary.Scaling;
+        int w = (int)(Width * scaling); 
+        int h = (int)(Height * scaling);
+        int m = _settingsManager.IconMargin;
+        
+        int x = 0, y = 0;
+        
+        switch (_settingsManager.IconCorner)
+        {
+            case 0: // Top-Left
+                x = screen.X + m;
+                y = screen.Y + m;
+                break;
+            case 1: // Top-Right
+                x = screen.X + screen.Width - w - m;
+                y = screen.Y + m;
+                break;
+            case 2: // Bottom-Left
+                x = screen.X + m;
+                y = screen.Y + screen.Height - h - m;
+                break;
+            case 3: // Bottom-Right
+                x = screen.X + screen.Width - w - m;
+                y = screen.Y + screen.Height - h - m;
+                break;
+        }
+        
+        Position = new PixelPoint(x, y);
+    }
+
 
     private WindowIcon? LoadIcon(string uri)
     {
@@ -155,15 +194,23 @@ public partial class MainWindow : Window
         if (handle == IntPtr.Zero) return;
 
         SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        
+        // Ensure position is correct in case resolution changed or something moved it
+        // Optional: UpdateIconPosition(); // Might be too heavy to do every 2s if not needed.
+        // Let's rely on events for now.
     }
+
 
     private void SetupTrayIcon()
     {
-        _trayIcon = new TrayIcon
+        if (_trayIcon == null)
         {
-            Icon = _unmutedIcon,
-            ToolTipText = "Mute Me"
-        };
+            _trayIcon = new TrayIcon
+            {
+                Icon = _unmutedIcon,
+                ToolTipText = "Mute Me"
+            };
+        }
 
         var menu = new NativeMenu();
         
@@ -190,7 +237,26 @@ public partial class MainWindow : Window
         modifierMenuItem.Menu = modMenu;
         menu.Add(modifierMenuItem);
         
-        // 4. Set Hotkey Button
+        // 4. Icon Position
+        var posMenuItem = new NativeMenuItem("Icon Position");
+        var posMenu = new NativeMenu();
+        
+        posMenu.Add(CreateRadioItem("Top Left", () => SetCorner(0), _settingsManager.IconCorner == 0));
+        posMenu.Add(CreateRadioItem("Top Right", () => SetCorner(1), _settingsManager.IconCorner == 1));
+        posMenu.Add(CreateRadioItem("Bottom Left", () => SetCorner(2), _settingsManager.IconCorner == 2));
+        posMenu.Add(CreateRadioItem("Bottom Right", () => SetCorner(3), _settingsManager.IconCorner == 3));
+        
+        posMenu.Add(new NativeMenuItemSeparator());
+        
+        var marginItem = new NativeMenuItem($"Margin ({_settingsManager.IconMargin}px)");
+        marginItem.Click += (_, _) => OpenMarginPopup();
+        posMenu.Add(marginItem);
+        
+        posMenuItem.Menu = posMenu;
+        menu.Add(posMenuItem);
+
+        // 5. Set Hotkey Button
+
         _hotkeyMenuItem = new NativeMenuItem($"Set Hotkey (Current: {_settingsManager.CurrentHotkey})");
         _hotkeyMenuItem.Click += (_, _) => StartRecordingHotkey();
         menu.Add(_hotkeyMenuItem);
@@ -233,8 +299,50 @@ public partial class MainWindow : Window
         _settingsManager.RequireAlt = alt;
         _settingsManager.Save();
     }
+
     
+    private void SetCorner(int corner)
+    {
+        _settingsManager.IconCorner = corner;
+        _settingsManager.Save();
+        UpdateIconPosition();
+        
+        // Refresh menu (Avalonia tray menu doesn't auto-refresh checks easily without rebuilding or manually toggling)
+        // Simplest way is to rebuild or update checks. `CreateRadioItem` sets initial state.
+        // Let's assume the user accepts the visual delay or we update manually if we kept references.
+        // Rebuilding the whole menu is easiest but might flicker. 
+        // For this task, let's just update position. 
+        // Ideally we should update the Checked state of the items.
+        // But I didn't store references to them. 
+        // Let's just rebuild the tray icon menu to be safe and clean.
+        SetupTrayIcon(); 
+    }
+    
+    private void OpenMarginPopup()
+    {
+        var popup = new MarginPopup(_settingsManager.IconMargin);
+        popup.MarginChanged += (newMargin) =>
+        {
+            _settingsManager.IconMargin = newMargin;
+            _settingsManager.Save();
+            UpdateIconPosition();
+            SetupTrayIcon(); // To update the "Margin (Xpx)" text
+        };
+        
+        if (Screens.Primary != null)
+        {
+            [DllImport("user32.dll")]
+            static extern bool GetCursorPos(out POINT lpPoint);
+            GetCursorPos(out POINT p);
+            popup.Position = new PixelPoint(p.X - 100, p.Y - 60);
+        }
+        
+        popup.Show();
+        popup.Activate();
+    }
+
     private async void InitializeAutoStartItem(NativeMenuItem item)
+
     {
         item.ToggleType = NativeMenuItemToggleType.CheckBox;
         
