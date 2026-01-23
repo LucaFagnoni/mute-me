@@ -27,6 +27,11 @@ public partial class MainWindow : Window
     private const int SWP_NOACTIVATE = 0x0010;
     private const int SWP_SHOWWINDOW = 0x0040;
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetProcessWorkingSetSize(IntPtr process, int minimumWorkingSetSize, int maximumWorkingSetSize);
+
+
     
     // MODIFIER KEYS
     [DllImport("user32.dll")]
@@ -53,7 +58,10 @@ public partial class MainWindow : Window
     // STATE
     private bool _isRecording = false;
     private HotkeyPopup? _activePopup; 
+
     private DispatcherTimer _topmostTimer;
+    private DispatcherTimer _memoryTimer;
+
  
     
     public MainWindow()
@@ -113,11 +121,26 @@ public partial class MainWindow : Window
         _topmostTimer.Tick += (s, e) => EnforceTopmost();
         _topmostTimer.Start();
 
+        // Start timer to periodically flush memory (every 30s)
+        _memoryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _memoryTimer.Tick += (s, e) => FlushMemory();
+        _memoryTimer.Start();
+
+
 
         SetupTrayIcon();
         SetMicrophone(MicrophoneController.GetMicrophoneMuteStatus() ?? false);
         
-        Opened += (_, _) => EnableClickThrough();
+        Opened += (_, _) => 
+        {
+            EnableClickThrough();
+            // Force memory cleanup after startup
+            Dispatcher.UIThread.Post(FlushMemory, DispatcherPriority.Background);
+        };
+
         
         UpdateIconPosition();
     }
@@ -199,6 +222,18 @@ public partial class MainWindow : Window
         // Optional: UpdateIconPosition(); // Might be too heavy to do every 2s if not needed.
         // Let's rely on events for now.
     }
+
+    private void FlushMemory()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+        {
+            try { SetProcessWorkingSetSize(System.Diagnostics.Process.GetCurrentProcess().Handle, -1, -1); }
+            catch { }
+        }
+    }
+
 
 
     private void SetupTrayIcon()
@@ -329,7 +364,10 @@ public partial class MainWindow : Window
             SetupTrayIcon(); // To update the "Margin (Xpx)" text
         };
         
+        popup.Closed += (s, e) => FlushMemory();
+        
         if (Screens.Primary != null)
+
         {
             [DllImport("user32.dll")]
             static extern bool GetCursorPos(out POINT lpPoint);
@@ -400,7 +438,11 @@ public partial class MainWindow : Window
             _settingsManager.Save();
         };
 
+        // Aggressive memory cleanup when popup closes
+        popup.Closed += (s, e) => FlushMemory();
+
         // Place near the cursor
+
         if (Screens.Primary != null)
         {
             [DllImport("user32.dll")]

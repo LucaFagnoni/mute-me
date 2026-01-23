@@ -23,6 +23,12 @@ public class SoundManager : IDisposable
         _rawMute = Load(mute);
         _rawUnmute = Load(unmute);
         _rawNoti = Load(noti);
+        
+        // Allocate buffers once
+        _pMute = Marshal.AllocHGlobal(_rawMute.Length);
+        _pUnmute = Marshal.AllocHGlobal(_rawUnmute.Length);
+        _pNoti = Marshal.AllocHGlobal(_rawNoti.Length);
+        
         RefreshBuffers();
     }
 
@@ -40,31 +46,36 @@ public class SoundManager : IDisposable
 
     private void RefreshBuffers()
     {
-        Free();
-        _pMute = Scale(_rawMute, _volume);
-        _pUnmute = Scale(_rawUnmute, _volume);
-        _pNoti = Scale(_rawNoti, _volume);
+        FillBuffer(_rawMute, _pMute, _volume);
+        FillBuffer(_rawUnmute, _pUnmute, _volume);
+        FillBuffer(_rawNoti, _pNoti, _volume);
     }
 
-    private IntPtr Scale(byte[] src, float vol)
+    private void FillBuffer(byte[] src, IntPtr dest, float vol)
     {
-        if (src.Length == 0) return IntPtr.Zero;
-        byte[] dest = new byte[src.Length];
-        Array.Copy(src, dest, src.Length);
-
-        if (vol < 0.99f)
+        if (src.Length == 0 || dest == IntPtr.Zero) return;
+        
+        // Opt: If volume is 100%, just copy raw
+        if (vol >= 0.99f)
         {
-            for (int i = 44; i < dest.Length - 1; i += 2)
-            {
-                short sample = (short)(BitConverter.ToInt16(dest, i) * vol);
-                BitConverter.GetBytes(sample).CopyTo(dest, i);
-            }
+            Marshal.Copy(src, 0, dest, src.Length);
+            return;
+        }
+
+        byte[] temp = new byte[src.Length];
+        Array.Copy(src, temp, src.Length);
+
+        for (int i = 44; i < temp.Length - 1; i += 2)
+        {
+            short sample = (short)(BitConverter.ToInt16(temp, i) * vol);
+            BitConverter.GetBytes(sample).CopyTo(temp, i);
         }
         
-        IntPtr p = Marshal.AllocHGlobal(dest.Length);
-        Marshal.Copy(dest, 0, p, dest.Length);
-        return p;
+        Marshal.Copy(temp, 0, dest, temp.Length);
     }
+
+
+
 
     public void PlayMuted() => Play(_pMute);
     public void PlayUnmuted() => Play(_pUnmute);
