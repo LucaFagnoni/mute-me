@@ -1,7 +1,7 @@
-﻿<Window xmlns="https://github.com/avaloniaui"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="Mute_Me.VolumePopup"
-        Title="Volume"
+        x:Class="Mute_Me.SliderPopup"
+        Title="Mute Me"
         Width="200" Height="100"
         SystemDecorations="None"
         ShowInTaskbar="False"
@@ -14,16 +14,16 @@
 
     <Border BorderBrush="#404040" BorderThickness="1" CornerRadius="8" Padding="15">
         <StackPanel Spacing="5">
-            <TextBlock Text="Effects Volume" Foreground="White" FontSize="12" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="LabelText" Foreground="White" FontSize="12" HorizontalAlignment="Center"/>
             <Grid ColumnDefinitions="*, Auto">
-                <Slider Name="VolSlider" 
+                <Slider x:Name="ValueSlider"
                         Grid.Column="0"
-                        Minimum="0" Maximum="100" Value="100"
-                        TickFrequency="10" IsSnapToTickEnabled="True"
+                        Minimum="0" Maximum="100"
+                        IsSnapToTickEnabled="True"
                         Margin="0,0,10,0"/>
-                <TextBlock Grid.Column="1" 
-                           Text="{Binding #VolSlider.Value, StringFormat='{}{0}%'}" 
-                           Foreground="Gray" 
+                <TextBlock x:Name="ValueText"
+                           Grid.Column="1"
+                           Foreground="Gray"
                            VerticalAlignment="Center"
                            Width="35"/>
             </Grid>

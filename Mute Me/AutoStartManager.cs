@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using System.Security.Principal;
+using System.Diagnostics;
+using System.Security;
 using System.Text;
 using Avalonia.Platform;
 
@@ -9,67 +9,41 @@ public class AutoStartManager
 {
     private const string TASK_NAME = "MuteMe_AutoStart";
 
-    private string GetSchTasksPath()
+    // Il manifest impone requireAdministrator, quindi il processo e' sempre elevato
+    // e sempre a 64 bit: niente check admin, niente probing di Sysnative.
+    private static Task<int> RunSchTasksAsync(string arguments) => Task.Run(() =>
     {
-        string root = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-        
-        string sysNative = Path.Combine(root, "Windows", "Sysnative", "schtasks.exe");
-        if (File.Exists(sysNative)) return sysNative;
-
-        string sys32 = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
-        if (File.Exists(sys32)) return sys32;
-
-        return "schtasks.exe";
-    }
-
-    private async Task<int> RunSchTasksAsync(string arguments)
-    {
-        string exePath = GetSchTasksPath();
-        
-        return await Task.Run(() =>
+        try
         {
-            try
+            using var process = Process.Start(new ProcessStartInfo
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = exePath,
-                    Arguments = arguments,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
+                FileName = "schtasks.exe",
+                Arguments = arguments,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+            if (process == null) return -1;
+            process.WaitForExit();
+            return process.ExitCode;
+        }
+        catch { return -1; }
+    });
 
-                using var process = Process.Start(startInfo);
-                if (process == null) return -1;
-                process.WaitForExit();
-                return process.ExitCode;
-            }
-            catch { return -1; }
-        });
-    }
-
-    public async Task<bool> IsStartupTaskActiveAsync()
-    {
-        int exitCode = await RunSchTasksAsync($"/Query /TN \"{TASK_NAME}\" /FO CSV");
-        return exitCode == 0;
-    }
+    public async Task<bool> IsStartupTaskActiveAsync() =>
+        await RunSchTasksAsync($"/Query /TN \"{TASK_NAME}\" /FO CSV") == 0;
 
     public async Task InstallStartupTaskAsync()
     {
-        if (!IsAdministrator()) return;
+        string template = LoadXmlFromAssets();
+        if (string.IsNullOrEmpty(template)) return;
 
-        string taskXmlTemplate = LoadXmlFromAssets();
-        if (string.IsNullOrEmpty(taskXmlTemplate)) return;
+        string exePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule!.FileName;
+        string finalXml = template.Replace("{EXE_PATH}", SecurityElement.Escape(exePath));
 
-        string appExePath = Process.GetCurrentProcess().MainModule!.FileName;
-        string safePath = System.Security.SecurityElement.Escape(appExePath); // Escape XML caratteri speciali
-        
-        string finalXml = taskXmlTemplate.Replace("{EXE_PATH}", safePath);
-
-        string tempXml = Path.GetTempFileName();
+        string tempXml = System.IO.Path.GetTempFileName();
         try
         {
-            File.WriteAllText(tempXml, finalXml, Encoding.Unicode);
+            await File.WriteAllTextAsync(tempXml, finalXml, Encoding.Unicode);
             await RunSchTasksAsync($"/Create /TN \"{TASK_NAME}\" /XML \"{tempXml}\" /F");
         }
         catch { }
@@ -79,34 +53,16 @@ public class AutoStartManager
         }
     }
 
-    public async Task UninstallStartupTaskAsync()
-    {
-        await RunSchTasksAsync($"/Delete /TN \"{TASK_NAME}\" /F");
-    }
+    public Task<int> UninstallStartupTaskAsync() => RunSchTasksAsync($"/Delete /TN \"{TASK_NAME}\" /F");
 
-    private string LoadXmlFromAssets()
+    private static string LoadXmlFromAssets()
     {
         try
         {
-            var uri = new Uri($"avares://MuteMe/Assets/TaskConfig.xml");
-
-            using var stream = AssetLoader.Open(uri);
+            using var stream = AssetLoader.Open(new Uri("avares://MuteMe/Assets/TaskConfig.xml"));
             using var reader = new StreamReader(stream);
             return reader.ReadToEnd();
         }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private bool IsAdministrator()
-    {
-        try
-        {
-            using var identity = WindowsIdentity.GetCurrent();
-            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
-        }
-        catch { return false; }
+        catch { return string.Empty; }
     }
 }

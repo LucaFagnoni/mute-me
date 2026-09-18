@@ -1,55 +1,46 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-		<AssemblyName>MuteMe</AssemblyName>
+        <AssemblyName>MuteMe</AssemblyName>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net9.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-		<ApplicationManifest>app.manifest</ApplicationManifest>
-        
-        <!-- CONFIGURAZIONE NATIVE AOT & SIZE -->
-        <PublishAot>true</PublishAot>
-        <PublishTrimmed>true</PublishTrimmed>
-        <TrimMode>link</TrimMode>
-        <SelfContained>true</SelfContained>
-        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        
-        <!-- Abilita il Trimming aggressivo -->
-        
-        <!-- Collega il file roots.xml per evitare che rompa il codice -->
-        <TrimmerRootDescriptor>roots.xml</TrimmerRootDescriptor>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
 
-        <!-- FONDAMENTALE PER IL MICROFONO: Abilita il vecchio sistema COM in AOT -->
-        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+        <!-- Native AOT: implica SelfContained + trimming, non serve ripeterli -->
+        <PublishAot>true</PublishAot>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <!-- Richiesto dal codice generato da LibraryImport / GeneratedComInterface -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <!-- Rimuove simboli di debug e dati inutili -->
         <DebugType>none</DebugType>
         <DebugSymbols>false</DebugSymbols>
-        <StripSymbols>true</StripSymbols>
-        
+
         <!-- Rimuove dati di localizzazione (Date/Valute estere) - Risparmia ~3MB -->
         <InvariantGlobalization>true</InvariantGlobalization>
-        
+
+        <!-- App da tray, ferma il 99% del tempo: il background GC e un thread
+             e un heap committed che non usiamo mai -->
+        <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+
         <!-- Avalonia Config -->
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Avalonia" Version="11.2.1"/>
+        <!-- Avalonia.Desktop tira dentro Avalonia come dipendenza transitiva -->
         <PackageReference Include="Avalonia.Desktop" Version="11.2.1"/>
         <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1"/>
-        
-        <!-- NOTA: HO RIMOSSO "Avalonia.Fonts.Inter". 
+
+        <!-- NOTA: HO RIMOSSO "Avalonia.Fonts.Inter".
              Questo pacchetto pesa 2.5 MB. Avalonia userà il font di sistema (Segoe UI). -->
-             
+
         <!-- Diagnostica solo in Debug -->
         <PackageReference Include="Avalonia.Diagnostics" Version="11.2.1" Condition="'$(Configuration)' == 'Debug'" />
     </ItemGroup>
 
     <ItemGroup>
         <AvaloniaResource Include="Assets\**" />
-        <!-- Includiamo roots.xml nel progetto ma non nell'output compilato -->
-        <None Include="roots.xml" /> 
     </ItemGroup>
 </Project>

@@ -1,15 +1,17 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Avalonia.Platform;
 
 namespace Mute_Me;
+
+public enum Sfx { Mute, Unmute, Noti }
 
 public class SoundManager : IDisposable
 {
     [DllImport("winmm.dll")] private static extern bool PlaySound(IntPtr p, IntPtr h, uint f);
     private const uint FLAGS = 0x0004 | 0x0001 | 0x0002; // MEMORY | ASYNC | NODEFAULT
 
-    private byte[] _rawMute, _rawUnmute, _rawNoti;
-    private IntPtr _pMute, _pUnmute, _pNoti;
+    private readonly byte[][] _raw;
+    private readonly IntPtr[] _buf;
     private float _volume = 1.0f;
 
     public int Volume
@@ -20,43 +22,49 @@ public class SoundManager : IDisposable
 
     public SoundManager(Uri mute, Uri unmute, Uri noti)
     {
-        _rawMute = Load(mute);
-        _rawUnmute = Load(unmute);
-        _rawNoti = Load(noti);
-        
-        // Allocate buffers once
-        _pMute = Marshal.AllocHGlobal(_rawMute.Length);
-        _pUnmute = Marshal.AllocHGlobal(_rawUnmute.Length);
-        _pNoti = Marshal.AllocHGlobal(_rawNoti.Length);
-        
+        _raw = [Load(mute), Load(unmute), Load(noti)];
+        _buf = Array.ConvertAll(_raw, b => Marshal.AllocHGlobal(b.Length));
         RefreshBuffers();
     }
 
-    private byte[] Load(Uri uri)
+    public void Play(Sfx sfx)
     {
-        try 
+        IntPtr p = _buf[(int)sfx];
+        if (p != IntPtr.Zero && _raw[(int)sfx].Length > 0) PlaySound(p, IntPtr.Zero, FLAGS);
+    }
+
+    public void Dispose()
+    {
+        for (int i = 0; i < _buf.Length; i++)
+        {
+            if (_buf[i] != IntPtr.Zero) Marshal.FreeHGlobal(_buf[i]);
+            _buf[i] = IntPtr.Zero;
+        }
+    }
+
+    private static byte[] Load(Uri uri)
+    {
+        try
         {
             using var s = AssetLoader.Open(uri);
             using var ms = new MemoryStream();
             s.CopyTo(ms);
             return ms.ToArray();
-        } 
-        catch { return Array.Empty<byte>(); }
+        }
+        catch { return []; }
     }
 
     private void RefreshBuffers()
     {
-        FillBuffer(_rawMute, _pMute, _volume);
-        FillBuffer(_rawUnmute, _pUnmute, _volume);
-        FillBuffer(_rawNoti, _pNoti, _volume);
+        for (int i = 0; i < _raw.Length; i++) FillBuffer(_raw[i], _buf[i]);
     }
 
-    private void FillBuffer(byte[] src, IntPtr dest, float vol)
+    private void FillBuffer(byte[] src, IntPtr dest)
     {
         if (src.Length == 0 || dest == IntPtr.Zero) return;
-        
-        // Opt: If volume is 100%, just copy raw
-        if (vol >= 0.99f)
+
+        // Volume pieno: copia grezza, niente riscalatura campione per campione
+        if (_volume >= 0.99f)
         {
             Marshal.Copy(src, 0, dest, src.Length);
             return;
@@ -65,31 +73,13 @@ public class SoundManager : IDisposable
         byte[] temp = new byte[src.Length];
         Array.Copy(src, temp, src.Length);
 
+        // 44 = header WAV PCM standard, i campioni a 16 bit iniziano dopo
         for (int i = 44; i < temp.Length - 1; i += 2)
         {
-            short sample = (short)(BitConverter.ToInt16(temp, i) * vol);
+            short sample = (short)(BitConverter.ToInt16(temp, i) * _volume);
             BitConverter.GetBytes(sample).CopyTo(temp, i);
         }
-        
+
         Marshal.Copy(temp, 0, dest, temp.Length);
     }
-
-
-
-
-    public void PlayMuted() => Play(_pMute);
-    public void PlayUnmuted() => Play(_pUnmute);
-    public void PlayNoti() => Play(_pNoti);
-
-    private void Play(IntPtr p) { if (p != IntPtr.Zero) PlaySound(p, IntPtr.Zero, FLAGS); }
-
-    private void Free()
-    {
-        if (_pMute != IntPtr.Zero) Marshal.FreeHGlobal(_pMute);
-        if (_pUnmute != IntPtr.Zero) Marshal.FreeHGlobal(_pUnmute);
-        if (_pNoti != IntPtr.Zero) Marshal.FreeHGlobal(_pNoti);
-        _pMute = _pUnmute = _pNoti = IntPtr.Zero;
-    }
-
-    public void Dispose() => Free();
 }

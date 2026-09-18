@@ -20,9 +20,4 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
-
-    private void Quit_OnClick(object? sender, EventArgs e)
-    {
-        Environment.Exit(0);
-    }
 }

@@ -1,119 +1,97 @@
-﻿using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.Marshalling; // Fondamentale per il nuovo COM
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace Mute_Me;
 
 public static partial class MicrophoneController
 {
-    public static bool IsMuted = false;
+    public static bool IsMuted;
 
-    // --- P/INVOKE ---
-    [LibraryImport("user32.dll")]
-    private static partial IntPtr GetForegroundWindow();
-    
-    [LibraryImport("user32.dll")]
-    private static partial IntPtr SendMessageW(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+    private static readonly Guid CLSID_MMDeviceEnumerator = new("BCDE0395-E52F-467C-8E3D-C4579291692E");
+    private static readonly Guid IID_IMMDeviceEnumerator = new("A95664D2-9614-4F35-A746-DE8DB63617E6");
+    private static readonly Guid IID_IAudioEndpointVolume = new("5CDF2C82-841E-4546-9722-0CF74078229A");
 
-    // GUIDs
-    private static readonly Guid CLSID_MMDeviceEnumerator = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
-    private static readonly Guid IID_IMMDeviceEnumerator = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
-    private static readonly Guid IID_IAudioEndpointVolume = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
-
-    // CACHED COM OBJECTS
+    private static readonly StrategyBasedComWrappers ComStrategy = new();
     private static IMMDeviceEnumerator? _enumerator;
     private static IAudioEndpointVolume? _volumeControl;
-    private static StrategyBasedComWrappers _comStrategy = new StrategyBasedComWrappers();
 
-    // CoCreateInstance that return raw IntPtr
     [LibraryImport("ole32.dll")]
-    private static partial int CoCreateInstance(
-        in Guid rclsid,
-        IntPtr pUnkOuter,
-        uint dwClsContext,
-        in Guid riid,
-        out IntPtr ppv);
+    private static partial int CoCreateInstance(in Guid rclsid, IntPtr pUnkOuter, uint dwClsContext, in Guid riid, out IntPtr ppv);
 
     public static bool? GetMicrophoneMuteStatus()
     {
-        try
+        // Due tentativi: il primo fallisce se l'endpoint in cache e' morto
+        // (mic scollegato, cambio device di default), il secondo gira su uno appena creato.
+        for (int attempt = 0; attempt < 2; attempt++)
         {
-            if (_volumeControl == null)
+            var vol = Endpoint();
+            if (vol == null) return null;
+            try
             {
-                InitializeComObjects();
+                if (vol.GetMute(out int muted) == 0)
+                {
+                    IsMuted = muted != 0;
+                    return IsMuted;
+                }
             }
-
-            if (_volumeControl == null) return null;
-
-            // 5. Read State
-            _volumeControl.GetMute(out int isMutedInt);
-            
-            bool isMuted = isMutedInt != 0;
-            IsMuted = isMuted;
-            
-            return isMuted;
+            catch { }
+            Reset();
         }
-        catch
-        {
-            // If it fails, force re-initialization next time
-            _volumeControl = null;
-            _enumerator = null;
-            return null;
-        }
-    }
-
-    private static void InitializeComObjects()
-    {
-        try 
-        {
-             // 1. Create raw COM instance (IntPtr)
-            int hr = CoCreateInstance(
-                CLSID_MMDeviceEnumerator, 
-                IntPtr.Zero, 
-                23, // CLSCTX_ALL
-                IID_IMMDeviceEnumerator, 
-                out IntPtr ptrEnumerator);
-
-            if (hr != 0 || ptrEnumerator == IntPtr.Zero) return;
-
-            // 2. Wrap the pointer
-            _enumerator = (IMMDeviceEnumerator)_comStrategy.GetOrCreateObjectForComInstance(ptrEnumerator, CreateObjectFlags.None);
-
-            // 3. Obtain Device (1 = eCapture, 0 = eConsole)
-            _enumerator.GetDefaultAudioEndpoint(1, 0, out IMMDevice speakers);
-
-            // 4. Activate Volume
-            Guid iid = IID_IAudioEndpointVolume;
-            speakers.Activate(ref iid, 0, IntPtr.Zero, out var vol);
-            _volumeControl = vol;
-        }
-        catch 
-        {
-            _volumeControl = null;
-            _enumerator = null; 
-        }
+        return null;
     }
 
     public static void SetMicMuted(bool mute)
     {
-        bool? realState = GetMicrophoneMuteStatus();
-        
-        if (realState.HasValue && realState.Value == mute)
+        for (int attempt = 0; attempt < 2; attempt++)
         {
-            IsMuted = mute;
-            return;
+            var vol = Endpoint();
+            if (vol == null) return;
+            try
+            {
+                if (vol.SetMute(mute ? 1 : 0, IntPtr.Zero) == 0)
+                {
+                    IsMuted = mute;
+                    return;
+                }
+            }
+            catch { }
+            Reset();
         }
+    }
 
+    private static IAudioEndpointVolume? Endpoint()
+    {
+        if (_volumeControl != null) return _volumeControl;
         try
         {
-            IntPtr h = GetForegroundWindow();
-            SendMessageW(h, 0x319, IntPtr.Zero, (IntPtr)0x180000);
-            IsMuted = mute;
+            int hr = CoCreateInstance(CLSID_MMDeviceEnumerator, IntPtr.Zero, 23 /* CLSCTX_ALL */,
+                IID_IMMDeviceEnumerator, out IntPtr ptrEnumerator);
+            if (hr != 0 || ptrEnumerator == IntPtr.Zero) return null;
+
+            _enumerator = (IMMDeviceEnumerator)ComStrategy.GetOrCreateObjectForComInstance(ptrEnumerator, CreateObjectFlags.None);
+
+            // 1 = eCapture, 0 = eConsole
+            if (_enumerator.GetDefaultAudioEndpoint(1, 0, out IMMDevice mic) != 0) { Reset(); return null; }
+
+            Guid iid = IID_IAudioEndpointVolume;
+            if (mic.Activate(ref iid, 0, IntPtr.Zero, out var vol) != 0) { Reset(); return null; }
+
+            _volumeControl = vol;
         }
-        catch { }
+        catch { Reset(); }
+        return _volumeControl;
+    }
+
+    private static void Reset()
+    {
+        _volumeControl = null;
+        _enumerator = null;
     }
 }
 
-// --- INTERFACCE COM (Definite con il nuovo sistema) ---
+// --- INTERFACCE COM ---
+// I NotImplN sono padding di vtable: servono a far cadere i metodi veri
+// sullo slot giusto, non toccare l'ordine.
 
 [GeneratedComInterface]
 [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
@@ -121,7 +99,7 @@ public static partial class MicrophoneController
 public partial interface IMMDeviceEnumerator
 {
     void NotImpl1();
-    
+
     [PreserveSig]
     int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppEndpoint);
 }
@@ -140,10 +118,15 @@ public partial interface IMMDevice
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public partial interface IAudioEndpointVolume
 {
-    void NotImpl1(); void NotImpl2(); void NotImpl3(); void NotImpl4(); 
-    void NotImpl5(); void NotImpl6(); void NotImpl7(); void NotImpl8(); 
-    void NotImpl9(); void NotImpl10(); void NotImpl11(); void NotImpl12(); 
-    
+    void NotImpl1(); void NotImpl2(); void NotImpl3(); void NotImpl4();
+    void NotImpl5(); void NotImpl6(); void NotImpl7(); void NotImpl8();
+    void NotImpl9(); void NotImpl10(); void NotImpl11();
+
+    // Slot 12
+    [PreserveSig]
+    int SetMute(int bMute, IntPtr pguidEventContext);
+
+    // Slot 13
     [PreserveSig]
     int GetMute(out int pbMute);
 }
