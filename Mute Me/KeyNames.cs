@@ -2,53 +2,43 @@ using System.Runtime.InteropServices;
 
 namespace Mute_Me;
 
-/// Traduce un virtual-key code nel nome del tasto secondo il layout di tastiera
-/// attivo, cosi il menu mostra "F13" invece di "124".
+/// Nome del tasto a partire dallo scancode hardware.
+///
+/// Lo scancode identifica il tasto FISICO: arriva dal raw input prima di ogni
+/// traduzione di layout, quindi non cambia se l utente commuta da IT a RU a JP.
+/// GetKeyNameText lo risolve attraverso il layout attivo, percio il nome esce
+/// nella lingua e nella convenzione della tastiera che l utente ha davvero,
+/// senza tabelle hardcoded qui dentro.
 public static class KeyNames
 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetKeyNameText(int lParam, [Out] char[] lpString, int cchSize);
 
-    [DllImport("user32.dll")]
-    private static extern uint MapVirtualKey(uint uCode, uint uMapType);
-
-    private const uint MAPVK_VK_TO_VSC_EX = 4;
-
-    public static string Describe(int vk) => vk switch
+    public static string Describe(int scanCode, bool extended)
     {
-        // Windows non sa nominare questi due: PrintScreen non ha voce in tabella
-        // e Pause condivide lo scancode (0xE11D) con Right Ctrl, quindi verrebbe
-        // fuori il nome sbagliato.
-        19 => "Pause",
-        44 => "Print Screen",
-
-        // F13..F24 spesso non hanno uno scancode mappabile, ma il nome e' regolare
-        // (112 = F1, quindi vk - 111). E' anche il default dell app: vk 124 = F13.
-        >= 124 and <= 135 => "F" + (vk - 111),
-
-        _ => FromLayout(vk)
-    };
-
-    private static string FromLayout(int vk)
-    {
-        uint sc = MapVirtualKey((uint)vk, MAPVK_VK_TO_VSC_EX);
-        if (sc == 0) return "#" + vk;
-
-        int lParam = (int)(sc & 0xFF) << 16;
-
-        // MapVirtualKey non segnala il prefisso E0 per tutti i tasti estesi:
-        // senza IsExtended le frecce diventano tasti del tastierino numerico
-        // (freccia destra -> "NUM 6", Insert -> "NUM 0").
-        if ((sc & 0xFF00) == 0xE000 || IsExtended(vk)) lParam |= 1 << 24;
-
         var buf = new char[64];
-        int len = GetKeyNameText(lParam, buf, buf.Length);
+        int len = GetKeyNameText(LParam(scanCode, extended), buf, buf.Length);
 
-        // Fallback al codice numerico: meglio "#42" di una stringa vuota nel menu.
-        return len > 0 ? new string(buf, 0, len) : "#" + vk;
+        if (len > 0)
+        {
+            var name = new string(buf, 0, len).Trim();
+            // Alcuni scancode fuori dal layout attivo tornano caratteri di controllo
+            // (0x7C su layout US torna un TAB letterale): non sono nomi.
+            if (name.Length > 0 && !name.Any(char.IsControl)) return name;
+        }
+
+        // F13..F24 hanno scancode standard ma quasi nessun layout li nomina.
+        if (!extended && scanCode is >= 0x64 and <= 0x6F) return "F" + (scanCode - 0x57);
+
+        // Tasto sconosciuto a questo layout: mostra lo scancode grezzo, cosi resta
+        // comunque identificabile e riassegnabile.
+        return extended ? $"SC E0{scanCode:X2}" : $"SC {scanCode:X2}";
     }
 
-    private static bool IsExtended(int vk) =>
-        vk is 33 or 34 or 35 or 36 or 37 or 38 or 39 or 40   // PgUp PgDn End Home Left Up Right Down
-           or 45 or 46 or 91 or 92 or 93 or 144 or 163 or 165; // Ins Del LWin RWin Apps NumLock RCtrl RAlt
+    private static int LParam(int scanCode, bool extended)
+    {
+        int lParam = (scanCode & 0xFF) << 16;
+        if (extended) lParam |= 1 << 24;
+        return lParam;
+    }
 }

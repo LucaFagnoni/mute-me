@@ -268,7 +268,8 @@ public partial class MainWindow : Window
         _trayIcon.IsVisible = true;
     }
 
-    private string HotkeyLabel() => $"Set Hotkey (Current: {KeyNames.Describe(_settingsManager.CurrentHotkey)})";
+    private string HotkeyLabel() =>
+        $"Set Hotkey (Current: {KeyNames.Describe(_settingsManager.HotkeyScanCode, _settingsManager.HotkeyExtended)})";
 
     private NativeMenuItem CreateRadioItem(string text, Action action, bool isChecked)
     {
@@ -374,13 +375,14 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnRawKeyPressed(int vKey)
+    private void OnRawKeyPressed(int scanCode, bool extended)
     {
         if (_isRecording)
         {
-            if (IsModifierKey(vKey)) return; // Ignores CTRL/ALT alone
+            if (IsModifierKey(scanCode)) return; // Ignores CTRL/ALT alone
 
-            _settingsManager.CurrentHotkey = vKey;
+            _settingsManager.HotkeyScanCode = scanCode;
+            _settingsManager.HotkeyExtended = extended;
             _isRecording = false;
             _settingsManager.Save();
 
@@ -395,7 +397,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (vKey != _settingsManager.CurrentHotkey) return;
+        if (scanCode != _settingsManager.HotkeyScanCode || extended != _settingsManager.HotkeyExtended) return;
 
         bool isShiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         bool isCtrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -409,12 +411,11 @@ public partial class MainWindow : Window
         }
     }
 
-    // Helper to filter keys that should not be triggers (Shift, Ctrl, Alt, Win)
-    private bool IsModifierKey(int vk)
-    {
-        // 16=Shift, 17=Ctrl, 18=Alt, 91=LWin, 92=RWin, 160-165=L/R Shift/Ctrl/Alt
-        return (vk >= 16 && vk <= 18) || vk == 91 || vk == 92 || (vk >= 160 && vk <= 165);
-    }
+    // Scancode dei modificatori, uguali su ogni layout perche' sono posizioni
+    // fisiche: Ctrl, LShift, RShift, Alt (E0 li rende i gemelli di destra),
+    // piu' i tasti Windows e Menu.
+    private bool IsModifierKey(int scanCode) =>
+        scanCode is 0x1D or 0x2A or 0x36 or 0x38 or 0x5B or 0x5C or 0x5D;
 
     private void SetMicrophone(bool isMuted)
     {

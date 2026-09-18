@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 
 namespace Mute_Me;
 
@@ -6,6 +6,9 @@ public sealed class HiddenRawInputWindow
 {
     // Consts
     private const uint WM_INPUT = 0x00FF;
+    private const ushort RI_KEY_BREAK = 0x01; // rilascio invece di pressione
+    private const ushort RI_KEY_E0 = 0x02;    // prefisso esteso
+    private const ushort RI_KEY_E1 = 0x04;    // prefisso esteso raro (solo Pause)
     private const uint RIDEV_INPUTSINK = 0x00000100;
     private const uint RID_INPUT = 0x10000003;
     private const int ERROR_CLASS_ALREADY_EXISTS = 1410;
@@ -19,8 +22,9 @@ public sealed class HiddenRawInputWindow
     private bool _isRegistered;
     private WndProcDelegate? _wndProc; // Reference kept to prevent GC collection
 
-    // Events
-    public event Action<int>? KeyPressed;
+    // Events: scancode del tasto fisico + flag esteso, non il virtual key.
+    // Il virtual key dipende dal layout attivo, lo scancode no.
+    public event Action<int, bool>? KeyPressed;
 
     public void Start()
     {
@@ -157,16 +161,37 @@ public sealed class HiddenRawInputWindow
             var raw = Marshal.PtrToStructure<RAWINPUT>(buffer);
 
             // 3. Process Keyboard Event
-            if (raw.header.dwType == 1) // 1 = RIM_TYPEKEYBOARD
+            if (raw.header.dwType != 1) return; // 1 = RIM_TYPEKEYBOARD
+
+            var kb = raw.keyboard;
+            if ((kb.Flags & RI_KEY_BREAK) != 0) return; // solo pressioni
+
+            // 0xFF e' il riempitivo che certe tastiere mandano dentro sequenze
+            // escape: non e' un tasto.
+            if (kb.VKey == 0xFF) return;
+
+            int scanCode = kb.MakeCode;
+            bool extended = (kb.Flags & RI_KEY_E0) != 0;
+
+            // Pause arriva come E1 1D: Windows lo nomina sullo scancode 0x45
+            // non esteso (0x45 esteso e' Num Lock).
+            if ((kb.Flags & RI_KEY_E1) != 0)
             {
-                // Flags & 1 == 0 means Key Down (Make Code)
-                bool isKeyDown = (raw.keyboard.Flags & 1) == 0; 
-                
-                if (isKeyDown)
-                {
-                    KeyPressed?.Invoke(raw.keyboard.VKey);
-                }
+                scanCode = 0x45;
+                extended = false;
             }
+
+            // Tastiere virtuali, KVM e sessioni remote a volte mandano solo il
+            // virtual key: ricostruiamo lo scancode dal layout come ripiego.
+            if (scanCode == 0)
+            {
+                uint mapped = MapVirtualKey(kb.VKey, MAPVK_VK_TO_VSC_EX);
+                if (mapped == 0) return;
+                scanCode = (int)(mapped & 0xFF);
+                extended = (mapped & 0xFF00) == 0xE000;
+            }
+
+            KeyPressed?.Invoke(scanCode, extended);
         }
         finally
         {
@@ -253,5 +278,9 @@ public sealed class HiddenRawInputWindow
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+    private const uint MAPVK_VK_TO_VSC_EX = 4;
     #endregion
 }
