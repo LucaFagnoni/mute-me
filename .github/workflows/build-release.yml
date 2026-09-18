@@ -26,9 +26,12 @@ jobs:
       run: dotnet restore
 
     - name: Pubblica (Native AOT)
-      # Nota: Ho cambiato l'output in ./publish come richiesto
+      # La configurazione AOT vive nel csproj: PublishAot implica self-contained,
+      # trimming e TrimMode=link, e PublishSingleFile non ha senso per un binario
+      # nativo. Nominare il progetto invece della soluzione evita NETSDK1194
+      # (--output non supportato pubblicando una soluzione).
       run: |
-        dotnet publish -c Release -r win-x64 --self-contained -p:PublishAot=true -p:PublishTrimmed=true -p:TrimMode=link -p:PublishSingleFile=true -p:StripSymbols=true -o ./publish
+        dotnet publish "Mute Me/Mute Me.csproj" -c Release -r win-x64 -o ./publish
 
     # (Opzionale) Rinomina l'exe per includere la versione o pulire il nome
     # - name: Rinomina Eseguibile
