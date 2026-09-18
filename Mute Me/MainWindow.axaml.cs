@@ -268,7 +268,7 @@ public partial class MainWindow : Window
         _trayIcon.IsVisible = true;
     }
 
-    private string HotkeyLabel() => $"Set Hotkey (Current: {_settingsManager.CurrentHotkey})";
+    private string HotkeyLabel() => $"Set Hotkey (Current: {KeyNames.Describe(_settingsManager.CurrentHotkey)})";
 
     private NativeMenuItem CreateRadioItem(string text, Action action, bool isChecked)
     {
