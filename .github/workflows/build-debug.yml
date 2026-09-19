@@ -3,7 +3,8 @@ name: Build Debug
 on:
   workflow_dispatch: # Permette di avviare la build manualmente da GitHub
   push:
-    branches: [ "main" ] # Avvia la build ad ogni push su main (opzionale)
+    branches: [ "main" ] # NOTA: il branch di default del repo e' "master",
+                         # quindi questo trigger automatico non scatta mai.
 
 jobs:
   build:
@@ -13,22 +14,14 @@ jobs:
     - name: Checkout del codice
       uses: actions/checkout@v4
 
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-
-    - name: Ripristina dipendenze
-      run: dotnet restore
-
-    - name: Pubblica (Debug - Single File)
-      # Nota: -p:DebugType=full assicura che i simboli di debug (PDB) siano inclusi
-      # -p:PublishSingleFile=true crea un unico exe
-      run: |
-        dotnet publish -c Debug -r win-x64 --self-contained -p:PublishSingleFile=true -p:DebugType=full -o ./publish_output
+    - name: Compila con simboli di debug
+      shell: cmd
+      run: src\build.bat debug
 
     - name: Carica Artefatto
       uses: actions/upload-artifact@v4
       with:
         name: MuteMe-Debug-Build
-        path: ./publish_output
+        path: |
+          src\build\MuteMe.exe
+          src\build\MuteMe.pdb

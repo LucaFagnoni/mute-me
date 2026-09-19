@@ -17,40 +17,23 @@ jobs:
     - name: Checkout del codice
       uses: actions/checkout@v4
 
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
+    # MSVC e Windows SDK sono gia' presenti sui runner windows-latest,
+    # build.bat li individua da solo con vswhere.
+    - name: Compila (Win32 / MSVC)
+      shell: cmd
+      run: src\build.bat
 
-    - name: Ripristina dipendenze
-      run: dotnet restore
-
-    - name: Pubblica (Native AOT)
-      # La configurazione AOT vive nel csproj: PublishAot implica self-contained,
-      # trimming e TrimMode=link, e PublishSingleFile non ha senso per un binario
-      # nativo. Nominare il progetto invece della soluzione evita NETSDK1194
-      # (--output non supportato pubblicando una soluzione).
-      run: |
-        dotnet publish "Mute Me/Mute Me.csproj" -c Release -r win-x64 -o ./publish
-
-    # (Opzionale) Rinomina l'exe per includere la versione o pulire il nome
-    # - name: Rinomina Eseguibile
-    #   run: ren ./publish/MuteMe.exe MuteMe_App.exe
-
-    # 1. Carica come Artefatto (GitHub lo zipperà comunque nella UI "Actions")
     - name: Upload Artifact (Internal)
       uses: actions/upload-artifact@v4
       with:
         name: MuteMe-Artifact
-        path: ./publish/MuteMe.exe 
-        # Puntando al file specifico, lo zip conterrà solo l'exe senza cartelle
+        path: src\build\MuteMe.exe
 
-    # 2. Crea una RELEASE (Qui scarichi l'EXE vero e proprio!)
+    # L'eseguibile e' autosufficiente: nessuna DLL da affiancare.
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: ./publish/MuteMe.exe
+        files: src\build\MuteMe.exe
         draft: false
         prerelease: false
-        # Nota: Questo step caricherà MuteMe.exe nella sezione "Releases" a destra del tuo repo.

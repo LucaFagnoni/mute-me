@@ -1,0 +1,16 @@
+#include <windows.h>
+#include "resource.h"
+
+/* Prima risorsa ICON del file: Windows la usa come icona dell eseguibile. */
+IDI_APPICON          ICON   "assets/appicon.ico"
+
+IDR_OVERLAY_MUTED    RCDATA "assets/overlay_muted.bgra"
+IDR_OVERLAY_UNMUTED  RCDATA "assets/overlay_unmuted.bgra"
+IDR_TRAY_MUTED       RCDATA "assets/tray_muted.bgra"
+IDR_TRAY_UNMUTED     RCDATA "assets/tray_unmuted.bgra"
+IDR_WAV_MUTE         RCDATA "assets/mute.wav"
+IDR_WAV_UNMUTE       RCDATA "assets/unmute.wav"
+IDR_WAV_NOTI         RCDATA "assets/notification.wav"
+IDR_TASK_XML         RCDATA "assets/TaskConfig.xml"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "muteme.manifest"
