@@ -26,7 +26,7 @@ rem /MT collega il CRT staticamente: l'exe non dipende da nessun redistributable
 cl.exe /nologo %CFLAGS% /MT /W4 /DUNICODE /D_UNICODE /Fo:build\ /Fd:build\ ^
     muteme.c build\muteme.res ^
     /link /SUBSYSTEM:WINDOWS /OUT:build\MuteMe.exe %LDFLAGS% ^
-    kernel32.lib user32.lib gdi32.lib shell32.lib ole32.lib advapi32.lib dwmapi.lib || exit /b 1
+    kernel32.lib user32.lib gdi32.lib shell32.lib ole32.lib advapi32.lib dwmapi.lib winmm.lib || exit /b 1
 
 echo.
 for %%f in (build\MuteMe.exe) do echo MuteMe.exe: %%~zf byte

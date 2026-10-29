@@ -21,9 +21,9 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <mmsystem.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
-#include <audioclient.h>
 #include <dwmapi.h>
 #include <math.h>
 #include <stdio.h>
@@ -71,12 +71,6 @@ static const GUID IID_IMMDeviceEnumerator_ =
     { 0xA95664D2, 0x9614, 0x4F35, { 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6 } };
 static const GUID IID_IAudioEndpointVolume_ =
     { 0x5CDF2C82, 0x841E, 0x4546, { 0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A } };
-static const GUID IID_IAudioClient_ =
-    { 0x1CB9AD4C, 0xDBFA, 0x4C32, { 0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2 } };
-static const GUID IID_IAudioRenderClient_ =
-    { 0xF294ACFC, 0x3146, 0x4483, { 0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2 } };
-static const GUID IID_IAudioStreamVolume_ =
-    { 0x93014887, 0x242D, 0x4068, { 0x8A, 0x15, 0xCF, 0x5E, 0x93, 0xB9, 0x0F, 0xE3 } };
 
 /* -------------------------------------------------------------------- stato */
 
@@ -92,6 +86,7 @@ typedef struct {
 typedef struct {
     const BYTE *raw;    /* puntatore dentro la risorsa, sola lettura */
     DWORD       size;
+    BYTE       *scaled; /* copia al volume scelto, allocata una volta e mai liberata */
 } Sfx;
 
 static Settings g_cfg = { 100, 0, 0, 0, DEFAULT_SCANCODE, 0, 0, 2 };
@@ -222,90 +217,51 @@ static const BYTE *LoadAsset(int id, DWORD *size)
     return (const BYTE *)LockResource(mem);
 }
 
+/* Riscala i campioni PCM a 16 bit. I buffer restano sempre gli stessi, cosi'
+   il thread input non puo' mai suonare memoria gia' liberata: nel caso peggiore
+   un suono partito proprio adesso esce col volume di prima. */
+static void SfxApplyVolume(void)
+{
+    int i;
+    DWORD off;
+
+    PlaySoundW(NULL, NULL, 0);
+    for (i = 0; i < 3; i++) {
+        Sfx *s = &g_sfx[i];
+        if (!s->scaled) continue;
+
+        memcpy(s->scaled, s->raw, s->size);
+        /* 44 = header WAV PCM standard, i campioni iniziano dopo. */
+        for (off = 44; off + 1 < s->size; off += 2) {
+            short sample;
+            memcpy(&sample, s->scaled + off, sizeof(sample));
+            sample = (short)(sample * g_cfg.sfxVolume / 100);
+            memcpy(s->scaled + off, &sample, sizeof(sample));
+        }
+    }
+}
+
 static void SfxInit(void)
 {
+    int i;
     g_sfx[0].raw = LoadAsset(IDR_WAV_MUTE,   &g_sfx[0].size);
     g_sfx[1].raw = LoadAsset(IDR_WAV_UNMUTE, &g_sfx[1].size);
     g_sfx[2].raw = LoadAsset(IDR_WAV_NOTI,   &g_sfx[2].size);
+    for (i = 0; i < 3; i++)
+        if (g_sfx[i].raw && g_sfx[i].size > 44) g_sfx[i].scaled = (BYTE *)malloc(g_sfx[i].size);
+    SfxApplyVolume();
 }
 
-/* WASAPI e non PlaySound: solo una sessione aperta da noi puo' chiedere di non
-   comparire nel mixer di Windows (AUDCLNT_SESSIONFLAGS_DISPLAY_HIDE). Il volume
-   e' quello dello stream, non della sessione, cosi' Windows non lo ricorda.
-   Un thread per suono, che finisce col suono: niente stato da condividere. */
-static DWORD WINAPI SfxThread(void *param)
-{
-    const Sfx *s = &g_sfx[(INT_PTR)param];
-    IAudioClient       *client;
-    IAudioRenderClient *render = NULL;
-    IAudioStreamVolume *volume = NULL;
-    WAVEFORMATEX fmt;
-    UINT32 total, done = 0, capacity, padding, n, channels, ch;
-    float level = g_cfg.sfxVolume / 100.0f;
-    BOOL started = FALSE;
-    BYTE *dst;
-
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-    CoInitializeEx(NULL, COINIT_MULTITHREADED);
-
-    client = (IAudioClient *)AudioActivate(eRender, &IID_IAudioClient_);
-    if (!client) goto out;
-
-    /* Header WAV canonico da 44 byte: fmt PCM a offset 20, campioni da 44.
-       PCMWAVEFORMAT non ha cbSize, quindi va azzerato a mano. */
-    memcpy(&fmt, s->raw + 20, 16);
-    fmt.cbSize = 0;
-    if (fmt.nBlockAlign == 0) goto out;
-    total = (s->size - 44) / fmt.nBlockAlign;
-
-    if (FAILED(IAudioClient_Initialize(client, AUDCLNT_SHAREMODE_SHARED,
-                   AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY |
-                   AUDCLNT_SESSIONFLAGS_DISPLAY_HIDE,
-                   10000000 /* 1 s in unita' da 100 ns: i nostri suoni ci stanno interi */,
-                   0, &fmt, NULL)) ||
-        FAILED(IAudioClient_GetBufferSize(client, &capacity)) ||
-        FAILED(IAudioClient_GetService(client, &IID_IAudioRenderClient_, (void **)&render)))
-        goto out;
-
-    if (SUCCEEDED(IAudioClient_GetService(client, &IID_IAudioStreamVolume_, (void **)&volume))) {
-        if (SUCCEEDED(IAudioStreamVolume_GetChannelCount(volume, &channels)))
-            for (ch = 0; ch < channels; ch++) IAudioStreamVolume_SetChannelVolume(volume, ch, level);
-        IAudioStreamVolume_Release(volume);
-    }
-
-    /* Riempie finche' c'e' da scrivere, poi aspetta che il buffer si svuoti. */
-    while (SUCCEEDED(IAudioClient_GetCurrentPadding(client, &padding))) {
-        if (done == total) {
-            if (padding == 0) break;
-        } else {
-            n = min(capacity - padding, total - done);
-            if (n && SUCCEEDED(IAudioRenderClient_GetBuffer(render, n, &dst))) {
-                memcpy(dst, s->raw + 44 + (size_t)done * fmt.nBlockAlign, (size_t)n * fmt.nBlockAlign);
-                IAudioRenderClient_ReleaseBuffer(render, n, 0);
-                done += n;
-            }
-        }
-        if (!started) {
-            if (FAILED(IAudioClient_Start(client))) break;
-            started = TRUE;
-        }
-        Sleep(10);
-    }
-    if (started) IAudioClient_Stop(client);
-
-out:
-    if (render) IAudioRenderClient_Release(render);
-    if (client) IAudioClient_Release(client);
-    CoUninitialize();
-    return 0;
-}
-
+/* SND_SYSTEM mette il suono nella sessione condivisa dei suoni di sistema invece
+   di aprirne una per il processo: cosi' non compariamo in nessun mixer, quello di
+   Windows come EarTrumpet. Il prezzo e' che il cursore "Segnali acustici di
+   sistema" scala anche i nostri suoni. Una sessione nostra, anche nascosta con
+   AUDCLNT_SESSIONFLAGS_DISPLAY_HIDE, resta inattiva fino all'uscita del processo
+   e i mixer di terze parti la mostrano lo stesso. */
 static void SfxPlay(int index)
 {
-    HANDLE thread;
-    if (!g_sfx[index].raw || g_sfx[index].size <= 44 || g_cfg.sfxVolume == 0) return;
-    thread = CreateThread(NULL, 0, SfxThread, (void *)(INT_PTR)index, 0, NULL);
-    if (thread) CloseHandle(thread);
+    if (!g_sfx[index].scaled || g_cfg.sfxVolume == 0) return;
+    PlaySoundW((LPCWSTR)g_sfx[index].scaled, NULL, SND_MEMORY | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM);
 }
 
 /* ---------------------------------------------------------------- nome tasto */
@@ -1055,6 +1011,7 @@ static LRESULT CALLBACK PopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         if (g_dragging) {
             g_dragging = FALSE;
             ReleaseCapture();
+            SfxApplyVolume();
             SettingsSave();
             SfxPlay(2);
         }

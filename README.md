@@ -12,7 +12,7 @@ Designed specifically for **gamers**, it utilizes **Raw Input** to detect keystr
 
 *   **Reliable Global Hotkey:** Uses Win32 `Raw Input` APIs (instead of standard hooks) to intercept keys. This ensures compatibility with competitive games (Valorant, COD, CS2, etc.) and anti-cheat systems.
 *   **Responsive Under Load:** The hotkey runs on its own time-critical thread that never waits on the UI or Explorer, and the process keeps its pages resident, so muting still works while a game compiles shaders or the system is paging.
-*   **Audio Feedback:** Plays confirmation sounds (Mute On/Off). Sounds play through a WASAPI session hidden from the Windows volume mixer, so MuteMe never shows up there.
+*   **Audio Feedback:** Plays confirmation sounds (Mute On/Off). Sounds play in the shared Windows system-sounds session, so MuteMe never shows up as an app in any volume mixer (Windows or EarTrumpet); the **System Sounds** slider also scales them.
 *   **Visual Feedback:** A small click-through overlay in a screen corner shows the current mic state at a glance. It scales with the display DPI and is excluded from screenshots, recordings and screen sharing. Settings live in an iOS-style panel opened from the tray, which exists only while it is open.
 *   **System Tray Only:** No cluttered windows. The app lives quietly in the System Tray.
 *   **Ultra Lightweight:** Written in plain C against the Win32 API. A single ~420 KB `.exe` with no runtime, no framework and no DLLs to ship alongside: it links only against libraries Windows already has. Around 3.5 MB of private memory at rest.
@@ -69,7 +69,7 @@ src\build.bat
 *   **Language:** C (C11), MSVC, no third-party dependencies.
 *   **UI:** Win32 `Shell_NotifyIcon` for the tray; the settings panel is drawn by hand into a DIB (anti-aliased rounded shapes from a distance function, GDI ClearType text, DWM rounded corners); a `WS_EX_LAYERED` click-through window drawn with `UpdateLayeredWindow` for the overlay.
 *   **Input:** Win32 `RegisterRawInputDevices` (scancodes, layout independent) + `GetAsyncKeyState` for modifiers, on a dedicated `THREAD_PRIORITY_TIME_CRITICAL` thread.
-*   **Audio:** WASAPI `IAudioEndpointVolume::SetMute` for the microphone; `IAudioClient` with `AUDCLNT_SESSIONFLAGS_DISPLAY_HIDE` for feedback, volume via `IAudioStreamVolume`.
+*   **Audio:** WASAPI `IAudioEndpointVolume::SetMute` for the microphone; `PlaySound` with `SND_SYSTEM` for feedback, with PCM byte scaling for volume.
 *   **Assets:** icons pre-rendered to premultiplied BGRA and embedded as `RCDATA`, so no image decoder is linked in.
 *   **Always on top:** `SetWinEventHook` on `EVENT_SYSTEM_FOREGROUND`, no polling timer.
 *   **Self-healing:** a 5 s watchdog timer re-registers raw input and re-adds the tray icon if Explorer dropped it.
