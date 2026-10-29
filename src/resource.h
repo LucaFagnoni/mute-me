@@ -11,13 +11,3 @@
 #define IDR_WAV_NOTI         107
 #define IDR_TASK_XML         108
 
-/* Comandi di menu. Le voci a scelta multipla occupano un intervallo:
-   il gestore ricava l'indice sottraendo la base. */
-#define IDM_MUTE             200
-#define IDM_VOLUME_BASE      210   /* +0..5  -> 0 20 40 60 80 100 % */
-#define IDM_MODIFIER_BASE    220   /* +0..3  -> nessuno shift ctrl alt */
-#define IDM_CORNER_BASE      230   /* +0..3  -> TL TR BL BR */
-#define IDM_MARGIN_BASE      240   /* +0..5  -> 0 2 4 8 16 32 px */
-#define IDM_HOTKEY           250
-#define IDM_AUTOSTART        251
-#define IDM_EXIT             252

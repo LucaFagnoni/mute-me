@@ -6,15 +6,16 @@ Designed specifically for **gamers**, it utilizes **Raw Input** to detect keystr
 
 ![Status](https://img.shields.io/badge/Platform-Windows-blue)
 ![Build](https://img.shields.io/badge/C-Win32-blue)
-![Size](https://img.shields.io/badge/Size-395%20KB-brightgreen)
+![Size](https://img.shields.io/badge/Size-420%20KB-brightgreen)
 
 ## ✨ Key Features
 
 *   **Reliable Global Hotkey:** Uses Win32 `Raw Input` APIs (instead of standard hooks) to intercept keys. This ensures compatibility with competitive games (Valorant, COD, CS2, etc.) and anti-cheat systems.
-*   **Audio Feedback:** Plays confirmation sounds (Mute On/Off). It features a custom PCM byte manipulation engine to handle volume control without relying on heavy external libraries.
-*   **Visual Feedback:** A small click-through overlay in a screen corner shows the current mic state at a glance. Settings live entirely in the native tray menu, so no extra windows are ever created.
+*   **Responsive Under Load:** The hotkey runs on its own time-critical thread that never waits on the UI or Explorer, and the process keeps its pages resident, so muting still works while a game compiles shaders or the system is paging.
+*   **Audio Feedback:** Plays confirmation sounds (Mute On/Off). Sounds play through a WASAPI session hidden from the Windows volume mixer, so MuteMe never shows up there.
+*   **Visual Feedback:** A small click-through overlay in a screen corner shows the current mic state at a glance. It scales with the display DPI and is excluded from screenshots, recordings and screen sharing. Settings live in an iOS-style panel opened from the tray, which exists only while it is open.
 *   **System Tray Only:** No cluttered windows. The app lives quietly in the System Tray.
-*   **Ultra Lightweight:** Written in plain C against the Win32 API. A single ~395 KB `.exe` with no runtime, no framework and no DLLs to ship alongside: it links only against libraries Windows already has. Around 2.7 MB of private memory and 4 threads at rest.
+*   **Ultra Lightweight:** Written in plain C against the Win32 API. A single ~420 KB `.exe` with no runtime, no framework and no DLLs to ship alongside: it links only against libraries Windows already has. Around 3.5 MB of private memory at rest.
 
 ## 🚀 Installation
 
@@ -27,16 +28,17 @@ Designed specifically for **gamers**, it utilizes **Raw Input** to detect keystr
 
 The application runs in the background and is accessible via the **System Tray** (near the Windows clock).
 
-### Context Menu (Right Click)
-Right-click the tray icon to access:
+### Settings Panel (Right Click)
+Right-click the tray icon to open the panel (double-click toggles mute). It follows the Windows light/dark setting and closes when you click elsewhere or press `Esc`.
 
-*   **Set Hotkey:** Records the next key you press. The menu shows the current binding by name (`F13`, `A`, `Pause`), resolved through your active keyboard layout.
+*   **Microphone:** Switch to mute/unmute, with the current state and hotkey.
+*   **Key:** Click, then press the key to bind (`Esc` cancels). The current binding is shown by name (`F13`, `A`, `Pause`), resolved through your active keyboard layout.
     *   Keys are stored by hardware scancode, so a binding survives switching keyboard layout.
-    *   Supports modifier combinations via the **Modifiers** submenu (`Shift`, `Ctrl`, `Alt`).
-*   **Sfx Volume:** Feedback beep volume, in steps (0 / 20 / 40 / 60 / 80 / 100 %).
-*   **Icon Position:** Which screen corner holds the overlay, plus its margin in pixels.
-*   **Auto Start (Admin):** Registers a scheduled task so the app starts elevated at logon.
-*   **Exit:** Closes the application.
+    *   **Modifier** (`None`, `Shift`, `Ctrl`, `Alt`): the chosen modifier must be held; any other modifier held at the same time is ignored, so the hotkey still fires while you sprint or crouch.
+*   **Volume:** Feedback sound volume, as a slider; a preview plays when you release it.
+*   **Corner / Margin:** Which screen corner holds the overlay, plus its margin in pixels.
+*   **Start at login:** Registers a scheduled task so the app starts elevated at logon.
+*   **Quit Mute Me:** Closes the application.
 
 ## ⚙️ Requirements
 
@@ -55,18 +57,19 @@ If you want to modify the code or build the app yourself:
 ```
 git clone https://github.com/LucaFagnoni/mute-me.git
 cd mute-me
-srcuild.bat
+src\build.bat
 ```
 
-`build.bat` locates MSVC and the Windows SDK through `vswhere`, so it needs no developer prompt. Add `debug` (`srcuild.bat debug`) for an unoptimised build with symbols.
+`build.bat` locates MSVC and the Windows SDK through `vswhere`, so it needs no developer prompt. Add `debug` (`src\build.bat debug`) for an unoptimised build with symbols.
 
 *The executable will be located in `src/build/MuteMe.exe`.*
 
 ## 🧩 Tech Stack
 
 *   **Language:** C (C11), MSVC, no third-party dependencies.
-*   **UI:** Win32 `Shell_NotifyIcon` + `TrackPopupMenu` for the tray, and a `WS_EX_LAYERED` click-through window drawn with `UpdateLayeredWindow` for the overlay.
-*   **Input:** Win32 `RegisterRawInputDevices` (scancodes, layout independent) + `GetAsyncKeyState` for modifiers.
-*   **Audio:** WASAPI `IAudioEndpointVolume::SetMute` for the microphone; `winmm.dll` `PlaySound` for feedback, with PCM byte scaling for volume.
+*   **UI:** Win32 `Shell_NotifyIcon` for the tray; the settings panel is drawn by hand into a DIB (anti-aliased rounded shapes from a distance function, GDI ClearType text, DWM rounded corners); a `WS_EX_LAYERED` click-through window drawn with `UpdateLayeredWindow` for the overlay.
+*   **Input:** Win32 `RegisterRawInputDevices` (scancodes, layout independent) + `GetAsyncKeyState` for modifiers, on a dedicated `THREAD_PRIORITY_TIME_CRITICAL` thread.
+*   **Audio:** WASAPI `IAudioEndpointVolume::SetMute` for the microphone; `IAudioClient` with `AUDCLNT_SESSIONFLAGS_DISPLAY_HIDE` for feedback, volume via `IAudioStreamVolume`.
 *   **Assets:** icons pre-rendered to premultiplied BGRA and embedded as `RCDATA`, so no image decoder is linked in.
 *   **Always on top:** `SetWinEventHook` on `EVENT_SYSTEM_FOREGROUND`, no polling timer.
+*   **Self-healing:** a 5 s watchdog timer re-registers raw input and re-adds the tray icon if Explorer dropped it.
